@@ -366,7 +366,7 @@ dprintf(2,"gst now: %d\n",bf.gst);
 void
 gbfsu()/*scroll screen up.*/
 {
-if(bfl==0){return;}
+if(!bfl){return;}
 --bfl;gbfu();gbfdpl();
 }
 
@@ -383,7 +383,7 @@ raw()/*enter raw terminal mode.*/
 	tcgetattr(0,&tos);
 	otos=tos;
 	/*TODO: macro.*/
-	if(atexit(&trm)!=0){write(2,"cannot set an exit function.\n",29);exit(1);}
+	if(atexit(&trm)){write(2,"cannot set an exit function.\n",29);exit(1);}
 	tos.c_lflag&=~(ECHO|ECHONL|ICANON|ISIG);
 	tos.c_iflag&=~(IXON|ICRNL);
 	tos.c_oflag&=~OPOST;/*prevent terminal from treating \n as \n\r.*/
