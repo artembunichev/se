@@ -23,6 +23,9 @@ condition,message,its length.*/
 #define AE(I,S,P,L)if(!(I=malloc(S))){write(2,"cant alloc "#P"#"#I".\n",14+L);exit(1);}
 #define RE(I,T,S,P,L)if(!(I=realloc(T,S))){write(2,"cant realloc "#P"#"#I".\n",16+L);exit(1);}
 #define EE(C,M,L)if(C){write(2,#M,L);exit(1);}
+/*macro for handling ambiguous characters in main loop.
+character,its function in 0 mode.*/
+#define AC(C,F)case C:{if(!mod){F();break;}goto pc;}
 /*move cursor up.*/
 #define MVU "\x1b[A"
 /*move cursor down.*/
@@ -545,38 +548,49 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 	{
 		if(read(0,&c,1)>0)
 		{
-			switch(c)
+			switch(c){
+			/*q.*/
+			case CTR(113):return 0;
+			/*j.*/
+			case CTR(106):
 			{
-				case CTR('q'):{exit(0);}
-				case CTR('j'):
-				{
-					mod^=1;
-					updm();
-					dprintf(2,"row:%d, col:%d\n",row,col);
-					SYCUR();
-					break;
-				}
-				case CTR('s'):{sv();break;}
-				/*TODO: make a macro.*/
-				case 'j':{if(!mod){gbfb();break;}goto pc;}
-				case ';':{if(!mod){gbff();break;}goto pc;}
-				case 'l':{if(!mod){gbfd();break;}goto pc;}
-				case 'k':{if(!mod){gbfu();break;}goto pc;}
-				case 'd':{if(!mod){gbfdf();break;}goto pc;}
-				case 's':{if(!mod){gbfdb();break;}goto pc;}
-				case 'e':{if(!mod){gbfel();break;}goto pc;}
-				case 'r':{if(!mod){gbfelr();break;}goto pc;}
-				case 'h':{if(!mod){gbfsd();break;}goto pc;}
-				case 'u':{if(!mod){gbfsu();break;}goto pc;}
-				case 8:case 127:{if(mod)gbfdb();break;}
-				default:
-				{
-					if(mod!=1||c<32||c>126)break;
-					pc:/*print char label.*/
-					gbfinsc(c);
-					write(1,&c,1);col++;
-					gbfdplrstl();					
-				}
+				mod^=1;
+				updm();
+				dprintf(2,"row:%d, col:%d\n",row,col);
+				SYCUR();
+				break;
+			}
+			/*s.*/
+			case CTR(115):{sv();break;}
+			/*j.*/
+			AC(106,gbfb)
+			/*;.*/
+			AC(59,gbff)
+			/*l.*/
+			AC(108,gbfd)
+			/*k.*/
+			AC(107,gbfu)
+			/*d.*/
+			AC(100,gbfdf)
+			/*s.*/
+			AC(115,gbfdb)
+			/*e.*/
+			AC(101,gbfel)
+			/*r.*/
+			AC(114,gbfelr)
+			/*h.*/
+			AC(104,gbfsd)
+			/*u.*/
+			AC(117,gbfsu)
+			case 8:case 127:{if(mod)gbfdb();break;}
+			default:{
+			if(mod!=1||c<32||c>126)break;
+			pc:/*print char label.*/
+			gbfinsc(c);
+			write(1,&c,1);
+			++col;
+			gbfdplrstl();					
+			}
 			}
 		}
 	}
