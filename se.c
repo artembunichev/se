@@ -63,6 +63,15 @@ char* fnm;
 int row=2;
 int col=1;
 
+/*own function for calculating string length.*/
+int
+strl(char* s){
+int i=0;/*string iterator.*/
+int l=0;/*length of the string.*/
+while(s[i]){++l;++i;}
+return l;
+}
+
 void
 itos(unsigned char x,char** s)/*integer to str.*/
 {
@@ -87,7 +96,7 @@ char* cs=0;/*col string.*/
 char* s=0;/*string carrying the command to set terminal cursor.*/
 int sl;/*command-string length.*/
 itos(r,&rs);itos(c,&cs);/*convert row and col to strings.*/
-sl=strlen(rs)+strlen(cs)+4;/*calc command length(4 stands for \x1b[ + ; + H).*/
+sl=strl(rs)+strl(cs)+4;/*calc command length(4 stands for \x1b[ + ; + H).*/
 s=malloc(sl+1);/*alloc memory for command string (+null byte).*/
 /*TODO: add macro.*/
 if(!s){dprintf(2,"cannot alloc memory.\n");exit(1);}
@@ -162,7 +171,7 @@ gbfinsc(char c)/*insert char.*/
 void
 gbfinss(char* s)/*insert string.*/
 {
-	int sl=strlen(s);/*lenght of inserted str.*/
+	int sl=strl(s);/*lenght of inserted str.*/
 	int i;
 	/*if gap hasn't got enough space for string-expaind buf.*/
 	if(bf.gsz<sl)gbfxpnd(sl-bf.gsz+BFXPNS);
@@ -418,7 +427,7 @@ WRVID((mod?"1":"0"),1);
 void
 updfnm()/*update filename.*/
 {
-WRVID(fnm,strlen(fnm));
+WRVID(fnm,strl(fnm));
 }
 
 void
