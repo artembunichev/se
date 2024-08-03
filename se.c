@@ -163,9 +163,11 @@ void
 gbfinss(char* s)/*insert string.*/
 {
 	int sl=strlen(s);/*lenght of inserted str.*/
+	int i;
 	/*if gap hasn't got enough space for string-expaind buf.*/
 	if(bf.gsz<sl)gbfxpnd(sl-bf.gsz+BFXPNS);
-	for(int i=0;i<sl;i++)bf.a[bf.gst+i]=s[i];/*insert str chars one by one.*/
+	i=0;
+	while(i<sl)bf.a[bf.gst+i]=s[i++];/*insert str chars one by one.*/
 	bf.gst+=sl;bf.gsz-=sl;/*move gap to the right(forward).*/
 }
 
@@ -353,11 +355,13 @@ while(r<wsz.ws_row&&++j<bf.sz)if(bf.a[j]=='\n')++r;
 wl=j-i+r;
 /*TODO: macro.*/
 char* w=malloc(wl);if(!w){dprintf(2,"cannot alloc memory.\n");exit(1);}
-for(z=i;z<j;++z){
+z=i;
+while(z<j){
 if(bf.a[z]=='\n'){
 	memcpy(w+k,"\n\r",2);k+=2;/*move term cursor to line start after every \n (mimic \r).*/
 }
 else{w[k]=bf.a[z];++k;}
+++z;
 }
 dprintf(2,"2i: %d, n: %d, j:%d, r:%d,wl:%d,k:%d\n",i,n,j,r,wl,k);
 memcpy(w+k,ERSF,3);
