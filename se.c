@@ -68,12 +68,12 @@ itos(unsigned char x,char** s)/*integer to str.*/
 {
 int l=1;/*integer length(number of digits).*/
 int z=x;/*tmp variable for counting length.*/
+int i=1;/*current string idx.*/
 while(z/=10)l++;/*count integer length.*/
 *s=malloc(l+1);/*alloc memory for result string.*/
 /*TODO: add macro.*/
 if(s==NULL){dprintf(2,"cannot alloc memory.\n");exit(1);}
 (*s)[l]='\0';/*start building up a string from the end.so we start from null byte.*/
-int i=1;/*current string idx.*/
 do{(*s)[l-i]=(x%10)+'0';/*convert digit to ascii char.*/
 x/=10;
 i++;/*go to next digit.*/
@@ -83,9 +83,10 @@ i++;/*go to next digit.*/
 void
 scur(unsigned char r,unsigned char c){/*set terminal cursor to row and column(only visual).*/
 char* rs=NULL;char* cs=NULL;/*row string,col string.*/
-itos(r,&rs);itos(c,&cs);/*convert row and col to strings.*/
 char* s=NULL;/*string carrying the command to set terminal cursor.*/
-int sl=strlen(rs)+strlen(cs)+4;/*calc command length(4 stands for \x1b[ + ; + H).*/
+int sl;/*command-string length.*/
+itos(r,&rs);itos(c,&cs);/*convert row and col to strings.*/
+sl=strlen(rs)+strlen(cs)+4;/*calc command length(4 stands for \x1b[ + ; + H).*/
 s=malloc(sl+1);/*alloc memory for command string (+null byte).*/
 /*TODO: add macro.*/
 if(s==NULL){dprintf(2,"cannot alloc memory.\n");exit(1);}
@@ -160,7 +161,7 @@ gbfinsc(char c)/*insert char.*/
 void
 gbfinss(char* s)/*insert string.*/
 {
-	int sl=strlen(s);/*len of inserted str.*/
+	int sl=strlen(s);/*lenght of inserted str.*/
 	/*if gap hasn't got enough space for string-expaind buf.*/
 	if(bf.gsz<sl)gbfxpnd(sl-bf.gsz+BFXPNS);
 	for(int i=0;i<sl;i++)bf.a[bf.gst+i]=s[i];/*insert str chars one by one.*/
@@ -197,6 +198,7 @@ else{write(1,ERSLF,3);gbfdplrstl();}
 void
 gbfdb()/*delete one char backward.*/
 {
+int i;
 if(!bf.gst)return;/*we can't delete backward if cursor in the begining of the text.*/
 --bf.gst;++bf.gsz;/*deleting backward is equal to shifting left gap boundary backward.*/
 /*if we've deleted \n char then we need to move current line above and append it to the end.*/
@@ -206,7 +208,7 @@ actually if we're on the first text line i should points to -1 to have the
 same meaning(idx before first char in line) in case when we're not on the
 first line, but it's easier to organize loop for i to be 0 eventually.
 so we'll just handle this case separately later.*/
-int i=bf.gst;
+i=bf.gst;
 while(i>0&&bf.a[--i]!='\n');/*find prev \n or zero idx.*/
 /*we do need to change row/col 'cause now cursor should be on the line above.*/
 --row;/*go line above.*/
@@ -233,9 +235,11 @@ void
 gbfel()/*erase the line cursor is currently on.*/
 {
 /*TODO:to func.*/
-int i=bf.gst;while(i>0&&bf.a[--i]!='\n');i+=!!i;
+int i=bf.gst;
+int j=bf.gst+bf.gsz-1;
+while(i>0&&bf.a[--i]!='\n');i+=!!i;
 /*TODO:to func.*/
-int j=bf.gst+bf.gsz-1;while(++j<bf.sz-1&&bf.a[j]!='\n');j+=j==bf.sz-1;
+while(++j<bf.sz-1&&bf.a[j]!='\n');j+=j==bf.sz-1;
 bf.gst=i;bf.gsz=j-i;
 col=1;SYCUR();write(1,ERSLA,4);
 }
@@ -244,7 +248,8 @@ void
 gbfelr()/*erase current line to the right.*/
 {
 /*TODO:to func.*/
-int i=bf.gst+bf.gsz-1;while(++i<bf.sz-1&&bf.a[i]!='\n');i+=i==bf.sz-1;
+int i=bf.gst+bf.gsz-1;
+while(++i<bf.sz-1&&bf.a[i]!='\n');i+=i==bf.sz-1;
 bf.gsz=i-bf.gst;
 write(1,ERSLF,4);
 }
@@ -264,12 +269,14 @@ gbff()/*move cursor forward.*/
 void
 gbfb()/*move cursor backward.*/
 {
+	int i;
 	if(!bf.gst){return;}
 	bf.a[bf.gst+bf.gsz-1]=bf.a[bf.gst-1];
 	bf.gst--;
 	if(bf.a[bf.gst+bf.gsz]=='\n')
 	{row--;
-		int i=bf.gst-1;while(i&&bf.a[i--]!='\n');
+		i=bf.gst-1;
+		while(i&&bf.a[i--]!='\n');
 		col=bf.gst-i-(!!i);SYCUR();
 	}else{--col;write(1,MVL,3);}
 	/*FOR DEBUG ONLY.*/
@@ -278,16 +285,17 @@ gbfb()/*move cursor backward.*/
 
 void
 gbfj(int j)/*jump to idx.*/
-{if(j<0||j>bf.sz||j==bf.gst||(j>bf.gst&&j<bf.gst+bf.gsz)){return;}
+{
+int e;
+int d;
+if(j<0||j>bf.sz||j==bf.gst||(j>bf.gst&&j<bf.gst+bf.gsz)){return;}
 if(j<bf.gst)
 {
 	memcpy(bf.a+j+bf.gsz,bf.a+j,bf.gst-j);
 	bf.gst=j;
-}
-else
-{
-	int e=bf.gst+bf.gsz;
-	int d=j-e;
+}else{
+	e=bf.gst+bf.gsz;
+	d=j-e;
 	memcpy(bf.a+bf.gst,bf.a+e,d);
 	bf.gst+=d;
 }
@@ -296,8 +304,10 @@ else
 void
 gbfd()/*move cursor down.*/
 {
-int i=bf.gst+bf.gsz;while(bf.a[i]!='\n'){if(i>bf.sz){return;}i++;}
-int j=1;while((i+j)<bf.sz&&bf.a[i+j]!='\n'&&j<col){j++;}
+int i=bf.gst+bf.gsz;
+int j=1;
+while(bf.a[i]!='\n'){if(i>bf.sz){return;}i++;}
+while((i+j)<bf.sz&&bf.a[i+j]!='\n'&&j<col){j++;}
 dprintf(2,"I:%d,bfsz:%d,J:%d\n",i,bf.sz,j);
 gbfj(i+j);row++;
 if(j==col){write(1,MVD,3);}
@@ -307,44 +317,56 @@ else{col=j;SYCUR();}
 void
 gbfu()/*move cursor up.*/
 {
-int i=bf.gst;while(bf.a[--i]!='\n'){if(i<0){return;}}
-int j=i;while(--j>=0&&bf.a[j]!='\n');
-row--;if(col>i-j){col=i-j;SYCUR();}else{write(1,MVU,3);}
+int i=bf.gst;
+int j=i;
+while(bf.a[--i]!='\n'){if(i<0){return;}}
+while(--j>=0&&bf.a[j]!='\n');
+--row;if(col>i-j){col=i-j;SYCUR();}else{write(1,MVU,3);}
 gbfj(j+col);
 }
 
 void
 gbfdpl()/*display buffer(display \n as \n\r without modifying original text).*/
-{write(1,MVBFST,6);
-int n=0;int i=0;while(n<bfl&&i<bf.sz){if(i==bf.gst){i=bf.gst+bf.gsz;continue;}if(bf.a[i]=='\n'){n++;}i++;}
-int r=1;int j=i-1;
+{
+int n=0;
+int i=0;
+int r=1;
+int j;
+int wl;
+int k=0;
+int z;
+write(1,MVBFST,6);
+while(n<bfl&&i<bf.sz){if(i==bf.gst){i=bf.gst+bf.gsz;continue;}if(bf.a[i]=='\n'){n++;}i++;}
+j=i-1;
 dprintf(2,"2i: %d, j:%d\n",i,j);while(r<wsz.ws_row&&++j<bf.sz){if(bf.a[j]=='\n'){r++;}}
-int wl=j-i+r;char* w=malloc(wl);if(w==NULL){dprintf(2,"cannot alloc memory.\n");exit(1);}int k=0;
-for(int z=i;z<j;++z){
+wl=j-i+r;
+/*TODO: macro.*/
+char* w=malloc(wl);if(w==NULL){dprintf(2,"cannot alloc memory.\n");exit(1);}
+for(z=i;z<j;++z){
 if(bf.a[z]=='\n'){
 	memcpy(w+k,"\n\r",2);k+=2;/*move term cursor to line start after every \n (mimic \r).*/
 }
-else{w[k]=bf.a[z];k++;}
+else{w[k]=bf.a[z];++k;}
 ;}
 dprintf(2,"2i: %d, n: %d, j:%d, r:%d,wl:%d,k:%d\n",i,n,j,r,wl,k);
 memcpy(w+k,ERSF,3);
-write(1,w,wl);free(w);
+write(1,w,wl);
+free(w);
 SYCUR();
 }
 
 void
 gbfsd()/*scroll screen down.*/
 {
-if(bfl)
-{}
-bfl++;gbfdpl();if(row==2){gbfd();row--;}else{gbfu();row++;}
+++bfl;gbfdpl();if(row==2){gbfd();row--;}else{gbfu();row++;}
 dprintf(2,"gst now: %d\n",bf.gst);
 }
+
 void
 gbfsu()/*scroll screen up.*/
 {
 if(bfl==0){return;}
-bfl--;gbfu();gbfdpl();
+--bfl;gbfu();gbfdpl();
 }
 
 void
@@ -359,6 +381,7 @@ raw()/*enter raw terminal mode.*/
 	struct termios tos;
 	tcgetattr(0,&tos);
 	otos=tos;
+	/*TODO: macro.*/
 	if(atexit(&trm)!=0){write(2,"cannot set an exit function.\n",29);exit(1);}
 	tos.c_lflag&=~(ECHO|ECHONL|ICANON|ISIG);
 	tos.c_iflag&=~(IXON|ICRNL);
@@ -393,52 +416,65 @@ upda()/*update all.*/
 void
 sv()/*save file.*/
 {
-dprintf(2,"SAVING FILE.\n");
-int fd=open("sav",O_WRONLY,O_TRUNC);
-if(fd==-1){dprintf(2,"cannot open file %s: %s.\n","sav",strerror(errno));}
+int fd;
 char wbf[RWBFSZ];
+int csz;
+int ri;
+int rl;
+dprintf(2,"SAVING FILE.\n");
+/*TODO: macro.*/
+fd=open("sav",O_WRONLY,O_TRUNC);
+if(fd==-1){dprintf(2,"cannot open file %s: %s.\n","sav",strerror(errno));}
 if(bf.gst>0){dprintf(2,"more 0\n");}
 /*TODO: need loop here.*/
-int csz=bf.gst>RWBFSZ?RWBFSZ:bf.gst;
+csz=bf.gst>RWBFSZ?RWBFSZ:bf.gst;
 memcpy(&wbf,bf.a,bf.gst);
 write(fd,&wbf,bf.gst);
-int ri=bf.gst+bf.gsz;
-int rl=bf.sz-ri;
+ri=bf.gst+bf.gsz;
+rl=bf.sz-ri;
 memcpy(&wbf,bf.a+ri,rl);
 write(fd,&wbf,rl);
+/*TODO: macro.*/
 if(close(fd)==-1){dprintf(2,"cannot close file %s: %s.\n","sav",strerror(errno));}
 }
 
 int
 main(int argc,char** argv)/*main func. involves main loop.*/
 {
+	int fd;
+	ssize_t rb;
+	char rbf[RWBFSZ];
+	unsigned char c;
+	/*TODO: macro.*/
 	if(argc>2){write(2,"too many args.\n",15);exit(1);}
 	/*FOR DEBUG ONLY.*/
 	write(2,"",0);
 	raw();
 	write(1,ERSA,4);
+	/*TODO: macro.*/
 	if(ioctl(1,TIOCGWINSZ,&wsz)==-1){dprintf(2,"cannot get win size: %s.\n",strerror(errno));exit(1);}
 	gbfini();
 	if(argc==2)
 	{
 		fnm=argv[1];
-		int fd=open(fnm,O_RDWR);
+		fd=open(fnm,O_RDWR);
+		/*TODO: macro.*/
 		if(fd==-1){dprintf(2,"cannot open file %s: %s.\n",fnm,strerror(errno));exit(1);}
-		ssize_t rb;
-		char rbf[RWBFSZ];
 		while((rb=read(fd,&rbf,RWBFSZ)))
 		{
 			bf.a=realloc(bf.a,bf.sz+rb);
+			/*TODO: macro.*/
 			if(bf.a==NULL){write(2,"cannot realloc buffer.\n",23);exit(1);}
 			memcpy(bf.a+bf.sz,&rbf,rb);
 			bf.sz+=rb;
 		}
+		/*TODO: macro.*/
 		if(rb==-1){dprintf(2,"cannot read file %s: %s.\n",fnm,strerror(errno));exit(1);}
+		/*TODO: macro.*/
 		if(close(fd)==-1){dprintf(2,"cannot close file %s: %s.\n",fnm,strerror(errno));exit(1);}
 	}
 	upda();
 	SYCUR();
-	unsigned char c;
 	gbflsi(1);
 	while(1)
 	{
