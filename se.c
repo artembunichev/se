@@ -141,10 +141,10 @@ void
 gbflsi(int l)/*idx of first char in line.*/
 {
 int n=0;int i=0;/*n-line count.*/
-if(!bf.gst){i=bf.gst+bf.gsz;}
+if(!bf.gst)i=bf.gst+bf.gsz;
 while(n<l){
 	if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
-	if(bf.a[i]=='\n'){n++;}
+	if(bf.a[i]=='\n')++n;
 	++i;
 }
 dprintf(2,"line %d first char at %d\n",l,i);
@@ -186,7 +186,7 @@ void
 gbfdf()/*delete one char forward.*/
 {
 int agi=bf.gst+bf.gsz;/*first aftergap idx.*/
-if(agi==bf.sz){return;}/*we can't delete forward if cursor is in the end of text.*/
+if(agi==bf.sz)return;/*we can't delete forward if cursor is in the end of text.*/
 bf.gsz++;/*deleting forward is equal to shifting right gap boundary forward.*/
 /*if we've deleted \n char then we need to move line below up and append it to the end. it requires us to
 redraw all the text after gap. we do not need to change row/col vars 'cause cursor is still staying on the
@@ -238,7 +238,8 @@ gbfel()/*erase the line cursor is currently on.*/
 /*TODO:to func.*/
 int i=bf.gst;
 int j=bf.gst+bf.gsz-1;
-while(i>0&&bf.a[--i]!='\n');i+=!!i;
+while(i>0&&bf.a[--i]!='\n');
+i+=!!i;
 /*TODO:to func.*/
 while(++j<bf.sz-1&&bf.a[j]!='\n');j+=j==bf.sz-1;
 bf.gst=i;bf.gsz=j-i;
@@ -258,7 +259,7 @@ write(1,ERSLF,4);
 void
 gbff()/*move cursor forward.*/
 {int nxi=bf.gst+bf.gsz;
-	if(nxi==bf.sz){return;}
+	if(nxi==bf.sz)return;
 	bf.a[bf.gst]=bf.a[nxi];
 	if(bf.a[bf.gst]=='\n'){row++;col=1;SYCUR();}
 	else{col++;write(1,MVR,3);}
@@ -271,11 +272,11 @@ void
 gbfb()/*move cursor backward.*/
 {
 	int i;
-	if(!bf.gst){return;}
+	if(!bf.gst)return;
 	bf.a[bf.gst+bf.gsz-1]=bf.a[bf.gst-1];
 	bf.gst--;
 	if(bf.a[bf.gst+bf.gsz]=='\n')
-	{row--;
+	{--row;
 		i=bf.gst-1;
 		while(i&&bf.a[i--]!='\n');
 		col=bf.gst-i-(!!i);SYCUR();
@@ -289,7 +290,7 @@ gbfj(int j)/*jump to idx.*/
 {
 int e;
 int d;
-if(j<0||j>bf.sz||j==bf.gst||(j>bf.gst&&j<bf.gst+bf.gsz)){return;}
+if(j<0||j>bf.sz||j==bf.gst||(j>bf.gst&&j<bf.gst+bf.gsz))return;
 if(j<bf.gst)
 {
 	memcpy(bf.a+j+bf.gsz,bf.a+j,bf.gst-j);
@@ -307,12 +308,16 @@ gbfd()/*move cursor down.*/
 {
 int i=bf.gst+bf.gsz;
 int j=1;
-while(bf.a[i]!='\n'){if(i>bf.sz){return;}i++;}
-while((i+j)<bf.sz&&bf.a[i+j]!='\n'&&j<col){j++;}
+while(bf.a[i]!='\n'){if(i>bf.sz)return;++i;}
+while((i+j)<bf.sz&&bf.a[i+j]!='\n'&&j<col)++j;
 dprintf(2,"I:%d,bfsz:%d,J:%d\n",i,bf.sz,j);
-gbfj(i+j);row++;
-if(j==col){write(1,MVD,3);}
-else{col=j;SYCUR();}
+gbfj(i+j);
+++row;
+if(j==col)write(1,MVD,3);
+else{
+col=j;
+SYCUR();
+}
 }
 
 void
@@ -320,9 +325,10 @@ gbfu()/*move cursor up.*/
 {
 int i=bf.gst;
 int j=i;
-while(bf.a[--i]!='\n'){if(i<0){return;}}
+while(bf.a[--i]!='\n')if(i<0)return;
 while(--j>=0&&bf.a[j]!='\n');
---row;if(col>i-j){col=i-j;SYCUR();}else{write(1,MVU,3);}
+--row;
+if(col>i-j){col=i-j;SYCUR();}else write(1,MVU,3);
 gbfj(j+col);
 }
 
@@ -337,9 +343,13 @@ int wl;
 int k=0;
 int z;
 write(1,MVBFST,6);
-while(n<bfl&&i<bf.sz){if(i==bf.gst){i=bf.gst+bf.gsz;continue;}if(bf.a[i]=='\n'){n++;}i++;}
+while(n<bfl&&i<bf.sz){
+if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
+if(bf.a[i]=='\n')++n;++i;
+}
 j=i-1;
-dprintf(2,"2i: %d, j:%d\n",i,j);while(r<wsz.ws_row&&++j<bf.sz){if(bf.a[j]=='\n'){r++;}}
+dprintf(2,"2i: %d, j:%d\n",i,j);
+while(r<wsz.ws_row&&++j<bf.sz)if(bf.a[j]=='\n')++r;
 wl=j-i+r;
 /*TODO: macro.*/
 char* w=malloc(wl);if(!w){dprintf(2,"cannot alloc memory.\n");exit(1);}
@@ -348,7 +358,7 @@ if(bf.a[z]=='\n'){
 	memcpy(w+k,"\n\r",2);k+=2;/*move term cursor to line start after every \n (mimic \r).*/
 }
 else{w[k]=bf.a[z];++k;}
-;}
+}
 dprintf(2,"2i: %d, n: %d, j:%d, r:%d,wl:%d,k:%d\n",i,n,j,r,wl,k);
 memcpy(w+k,ERSF,3);
 write(1,w,wl);
@@ -359,15 +369,17 @@ SYCUR();
 void
 gbfsd()/*scroll screen down.*/
 {
-++bfl;gbfdpl();if(row==2){gbfd();row--;}else{gbfu();row++;}
+++bfl;gbfdpl();if(row==2){gbfd();--row;}else{gbfu();++row;}
 dprintf(2,"gst now: %d\n",bf.gst);
 }
 
 void
 gbfsu()/*scroll screen up.*/
 {
-if(!bfl){return;}
---bfl;gbfu();gbfdpl();
+if(!bfl)return;
+--bfl;
+gbfu();
+gbfdpl();
 }
 
 void
@@ -461,7 +473,7 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 		fd=open(fnm,O_RDWR);
 		/*TODO: macro.*/
 		if(fd==-1){dprintf(2,"cannot open file %s: %s.\n",fnm,strerror(errno));exit(1);}
-		while((rb=read(fd,&rbf,RWBFSZ)))
+		while((rb=read(fd,&rbf,RWBFSZ))>0)
 		{
 			bf.a=realloc(bf.a,bf.sz+rb);
 			/*TODO: macro.*/
