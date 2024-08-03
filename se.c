@@ -1,0 +1,482 @@
+#include<termios.h>
+#include<unistd.h>
+#include<fcntl.h>
+#include<sys/ioctl.h>
+#include<stdlib.h>
+#include<signal.h>
+#include<errno.h>
+#include<string.h>
+#include<stdio.h>
+
+/*move cursor up.*/
+#define MVU "\x1b[A"
+/*move cursor down.*/
+#define MVD "\x1b[B"
+/*move cursor left.*/
+#define MVL "\x1b[D"
+/*move cursor right.*/
+#define MVR "\x1b[C"
+#define BFSTR "2"
+/*move cursor to the top-left corner.*/
+#define MVTL "\x1b[0;0H"
+/*move to buffer start.*/
+#define MVBFST "\x1b[" BFSTR ";0H"
+/*erase forward to the eof screen.*/
+#define ERSF "\x1b[J"
+/*erase all.*/
+#define ERSA "\x1b[2J"
+/*erase line forward.*/
+#define ERSLF "\x1b[K"
+/*erase entire line.*/
+#define ERSLA "\x1b[2K"
+/*video reset.*/
+#define VRST "\033[0m"
+/*reverse video (it's used for reversing bg and fg colors).*/
+#define RVID "\033[7m"
+/*mask for detecting CTRL.*/
+#define CTR(C) (C&0x1f)
+#define BFISZ 2
+/*buffer expand size.*/
+#define BFXPNS 32
+/*readwrite buf size*/
+#define RWBFSZ 4096
+/*write text in reverse video mode.S-str,L-len.*/
+#define WRVID(S,L) (write(1,RVID,4),write(1,S,L),write(1,VRST,4))
+/*sync terminal visual cursor with buffer cursor position.*/
+#define SYCUR() scur(row,col)
+
+/*gap buffer.sz-size(gap inclusive) a-arr gst-gap start gsz-gap size.*/
+typedef struct{size_t sz;char* a;int gst;size_t gsz;}gbf;
+/*original termios. we'll use it to restore original terminal settings.*/
+struct termios otos;
+/*term win size.*/
+struct winsize wsz={0};
+/*editor mode. 0-navigate 1-edit.*/
+char mod=0;
+/*text buffer(the only one).*/
+gbf bf={0};
+/*topmost buffer line(for scroll).*/
+int bfl=0;
+/*filename of currently edited file.*/
+char* fnm;
+/*cursor position.row and column respectively.*/
+int row=2;
+int col=1;
+
+void
+itos(unsigned char x,char** s)/*integer to str.*/
+{
+int l=1;/*integer length(number of digits).*/
+int z=x;/*tmp variable for counting length.*/
+while(z/=10)l++;/*count integer length.*/
+*s=malloc(l+1);/*alloc memory for result string.*/
+/*TODO: add macro.*/
+if(s==NULL){dprintf(2,"cannot alloc memory.\n");exit(1);}
+(*s)[l]='\0';/*start building up a string from the end.so we start from null byte.*/
+int i=1;/*current string idx.*/
+do{(*s)[l-i]=(x%10)+'0';/*convert digit to ascii char.*/
+x/=10;
+i++;/*go to next digit.*/
+}while(x);
+}
+
+void
+scur(unsigned char r,unsigned char c){/*set terminal cursor to row and column(only visual).*/
+char* rs=NULL;char* cs=NULL;/*row string,col string.*/
+itos(r,&rs);itos(c,&cs);/*convert row and col to strings.*/
+char* s=NULL;/*string carrying the command to set terminal cursor.*/
+int sl=strlen(rs)+strlen(cs)+4;/*calc command length(4 stands for \x1b[ + ; + H).*/
+s=malloc(sl+1);/*alloc memory for command string (+null byte).*/
+/*TODO: add macro.*/
+if(s==NULL){dprintf(2,"cannot alloc memory.\n");exit(1);}
+strcpy(s,"\x1b[");/*building a command string.*/
+strcat(s,rs);
+strcat(s,";");
+strcat(s,cs);
+strcat(s,"H");
+/*write to stdout in order to send command to terminal
+for it(term) to apply it(str).*/
+write(1,s,sl);
+free(rs);free(cs);/*free memory was reserved for row/col strings.*/
+}
+
+/*gap buffer is a main structure for text buffer.*/
+void
+gbfini()/*init gap buffer.*/
+{
+	bf.sz=BFISZ;/*set buf size to predefined one.*/
+	bf.a=malloc(BFISZ);/*alloc memory for buf array.*/
+	/*TODO:macro.*/
+	if(bf.a==NULL){write(2,"cannot alloc buffer array.\n",27);exit(1);}
+	bf.gst=0;bf.gsz=BFISZ;/*place gap at 0 idx.*/
+}
+
+/*expand buffer with delta. used the all the gap space was filled
+and it doesn't seem to be the end of input.*/
+void
+gbfxpnd(int d)
+{
+	size_t b=bf.sz-bf.gst;/*how many characters we'll need to shift in order to place more gaps.*/
+	bf.sz+=d;/*increase size variable.*/
+	/*increase gap variable (when we're expanding buffer - we simply add more gaps, so if
+	buffer is expanded by 3 hence gap size is now 3 too (we assume we'll call expand function only when
+	current gap size is 0)).*/
+	bf.gsz+=d;
+	bf.a=realloc(bf.a,bf.sz);/*realloc buffer array to new size.*/
+	/*TODO: macro.*/
+	if(bf.a==NULL){write(2,"cannot realloc buffer array.\n",29);exit(1);}
+	/*copy all arr content starting from gap pos to the very end of arr (for contents last char to be the
+	last char in the arr) in order to fill the "holes" appear after realloc. we do not need to swap
+	holes and content as long as we can treat everything placed within gap boundaries as trash
+	example: [1,2,()3,4,5] - sz=5,gst=2,gsz=0 - we want to expand by 5
+	         [1,2,(3,4,5,0,0),0,0,0] - sz=10,gst=2,gsz=5 - zeroes are random data produced by realloc
+	         [1,2,(3,4,5,0,0),3,4,5] - now content without the () is [1,2,3,4,5] as it
+	                                   was in the begining.*/
+	memcpy(bf.a+bf.sz-b,bf.a+bf.gst,b);
+}
+
+void
+gbflsi(int l)/*idx of first char in line.*/
+{
+int n=0;int i=0;/*n-line count.*/
+if(!bf.gst){i=bf.gst+bf.gsz;}
+while(n<l){
+	if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
+	if(bf.a[i]=='\n'){n++;}
+	++i;
+}
+dprintf(2,"line %d first char at %d\n",l,i);
+}
+
+void
+gbfinsc(char c)/*insert char.*/
+{
+	/*if there is no enough space for gap-expand buf.*/
+	if(!bf.gsz)gbfxpnd(bf.gsz+BFXPNS+1);
+	bf.a[bf.gst]=c;/*put char before the gap.*/
+	++bf.gst;--bf.gsz;/*move gap to the right(forward).*/
+}
+
+void
+gbfinss(char* s)/*insert string.*/
+{
+	int sl=strlen(s);/*len of inserted str.*/
+	/*if gap hasn't got enough space for string-expaind buf.*/
+	if(bf.gsz<sl)gbfxpnd(sl-bf.gsz+BFXPNS);
+	for(int i=0;i<sl;i++)bf.a[bf.gst+i]=s[i];/*insert str chars one by one.*/
+	bf.gst+=sl;bf.gsz-=sl;/*move gap to the right(forward).*/
+}
+
+void gbfdplrst(){/*disply rest of the buffer.*/
+int x=bf.gst+bf.gsz;write(1,bf.a+x,bf.sz-x);/*display everything what is after gap.*/
+SYCUR();/*sync term cursor 'cause it's now in the end of the text.*/
+}
+
+void gbfdplrstl(){/*display rest of the current line.*/
+int u=bf.gst+bf.gsz;/*first aftergap idx.*/
+int i=u;/*iterator and next \n or eof idx at the same time.*/
+while(i<bf.sz&&bf.a[i]!='\n')++i;/*find idx of next \n or eof.*/
+write(1,bf.a+u,i-u);/*print all the chars between gap end and closes \n or eof.*/
+SYCUR();/*sync term cur 'cause it's now in the end of line.*/
+}
+
+void
+gbfdf()/*delete one char forward.*/
+{
+int agi=bf.gst+bf.gsz;/*first aftergap idx.*/
+if(agi==bf.sz){return;}/*we can't delete forward if cursor is in the end of text.*/
+bf.gsz++;/*deleting forward is equal to shifting right gap boundary forward.*/
+/*if we've deleted \n char then we need to move line below up and append it to the end. it requires us to
+redraw all the text after gap. we do not need to change row/col vars 'cause cursor is still staying on the
+same line.*/
+if(bf.a[agi]=='\n'){write(1,ERSF,3);gbfdplrst();}
+/*if char we've deleted is not a \n then we need to redraw only current line.*/
+else{write(1,ERSLF,3);gbfdplrstl();}
+}
+
+void
+gbfdb()/*delete one char backward.*/
+{
+if(!bf.gst)return;/*we can't delete backward if cursor in the begining of the text.*/
+--bf.gst;++bf.gsz;/*deleting backward is equal to shifting left gap boundary backward.*/
+/*if we've deleted \n char then we need to move current line above and append it to the end.*/
+if(bf.a[bf.gst]=='\n'){
+/*iterator and prev \n or ZERO idx. their semantic meanings are not the same.
+actually if we're on the first text line i should points to -1 to have the
+same meaning(idx before first char in line) in case when we're not on the
+first line, but it's easier to organize loop for i to be 0 eventually.
+so we'll just handle this case separately later.*/
+int i=bf.gst;
+while(i>0&&bf.a[--i]!='\n');/*find prev \n or zero idx.*/
+/*we do need to change row/col 'cause now cursor should be on the line above.*/
+--row;/*go line above.*/
+/*place cur in the end of previous line (bf.gst-i) is for prev line length
+and +(!i) trick is for handling that semantic difference described above.*/
+col=bf.gst-i+(!i);
+SYCUR();/*sync term cursor with new row/col positions we've just set.*/
+write(1,ERSF,3);/*erase everything after cursor.*/
+gbfdplrst();/*reprint everything after cursor.*/
+}
+else{/*if char we've deleted is not a \n.*/
+--col;/*move cursor back one char horizontally.*/
+/*we don't necessary need to sync here (although we stll can) 'cause in
+this case it's more simpler to move cursor left by appropriate esc-sequence.*/
+write(1,MVL,3);/*so move cursor left.*/
+/*as far as we didn't move any line, deletion operation affected only current
+line, so we need to redraw only it.*/
+write(1,ERSLF,3);
+gbfdplrstl();
+}
+}
+
+void
+gbfel()/*erase the line cursor is currently on.*/
+{
+/*TODO:to func.*/
+int i=bf.gst;while(i>0&&bf.a[--i]!='\n');i+=!!i;
+/*TODO:to func.*/
+int j=bf.gst+bf.gsz-1;while(++j<bf.sz-1&&bf.a[j]!='\n');j+=j==bf.sz-1;
+bf.gst=i;bf.gsz=j-i;
+col=1;SYCUR();write(1,ERSLA,4);
+}
+
+void
+gbfelr()/*erase current line to the right.*/
+{
+/*TODO:to func.*/
+int i=bf.gst+bf.gsz-1;while(++i<bf.sz-1&&bf.a[i]!='\n');i+=i==bf.sz-1;
+bf.gsz=i-bf.gst;
+write(1,ERSLF,4);
+}
+
+void
+gbff()/*move cursor forward.*/
+{int nxi=bf.gst+bf.gsz;
+	if(nxi==bf.sz){return;}
+	bf.a[bf.gst]=bf.a[nxi];
+	if(bf.a[bf.gst]=='\n'){row++;col=1;SYCUR();}
+	else{col++;write(1,MVR,3);}
+	bf.gst++;
+	/*FOR DEBUG ONLY.*/
+	gbflsi(1);
+}
+
+void
+gbfb()/*move cursor backward.*/
+{
+	if(!bf.gst){return;}
+	bf.a[bf.gst+bf.gsz-1]=bf.a[bf.gst-1];
+	bf.gst--;
+	if(bf.a[bf.gst+bf.gsz]=='\n')
+	{row--;
+		int i=bf.gst-1;while(i&&bf.a[i--]!='\n');
+		col=bf.gst-i-(!!i);SYCUR();
+	}else{--col;write(1,MVL,3);}
+	/*FOR DEBUG ONLY.*/
+	gbflsi(1);
+}
+
+void
+gbfj(int j)/*jump to idx.*/
+{if(j<0||j>bf.sz||j==bf.gst||(j>bf.gst&&j<bf.gst+bf.gsz)){return;}
+if(j<bf.gst)
+{
+	memcpy(bf.a+j+bf.gsz,bf.a+j,bf.gst-j);
+	bf.gst=j;
+}
+else
+{
+	int e=bf.gst+bf.gsz;
+	int d=j-e;
+	memcpy(bf.a+bf.gst,bf.a+e,d);
+	bf.gst+=d;
+}
+}
+
+void
+gbfd()/*move cursor down.*/
+{
+int i=bf.gst+bf.gsz;while(bf.a[i]!='\n'){if(i>bf.sz){return;}i++;}
+int j=1;while((i+j)<bf.sz&&bf.a[i+j]!='\n'&&j<col){j++;}
+dprintf(2,"I:%d,bfsz:%d,J:%d\n",i,bf.sz,j);
+gbfj(i+j);row++;
+if(j==col){write(1,MVD,3);}
+else{col=j;SYCUR();}
+}
+
+void
+gbfu()/*move cursor up.*/
+{
+int i=bf.gst;while(bf.a[--i]!='\n'){if(i<0){return;}}
+int j=i;while(--j>=0&&bf.a[j]!='\n');
+row--;if(col>i-j){col=i-j;SYCUR();}else{write(1,MVU,3);}
+gbfj(j+col);
+}
+
+void
+gbfdpl()/*display buffer(display \n as \n\r without modifying original text).*/
+{write(1,MVBFST,6);
+int n=0;int i=0;while(n<bfl&&i<bf.sz){if(i==bf.gst){i=bf.gst+bf.gsz;continue;}if(bf.a[i]=='\n'){n++;}i++;}
+int r=1;int j=i-1;
+dprintf(2,"2i: %d, j:%d\n",i,j);while(r<wsz.ws_row&&++j<bf.sz){if(bf.a[j]=='\n'){r++;}}
+int wl=j-i+r;char* w=malloc(wl);if(w==NULL){dprintf(2,"cannot alloc memory.\n");exit(1);}int k=0;
+for(int z=i;z<j;++z){
+if(bf.a[z]=='\n'){
+	memcpy(w+k,"\n\r",2);k+=2;/*move term cursor to line start after every \n (mimic \r).*/
+}
+else{w[k]=bf.a[z];k++;}
+;}
+dprintf(2,"2i: %d, n: %d, j:%d, r:%d,wl:%d,k:%d\n",i,n,j,r,wl,k);
+memcpy(w+k,ERSF,3);
+write(1,w,wl);free(w);
+SYCUR();
+}
+
+void
+gbfsd()/*scroll screen down.*/
+{
+if(bfl)
+{}
+bfl++;gbfdpl();if(row==2){gbfd();row--;}else{gbfu();row++;}
+dprintf(2,"gst now: %d\n",bf.gst);
+}
+void
+gbfsu()/*scroll screen up.*/
+{
+if(bfl==0){return;}
+bfl--;gbfu();gbfdpl();
+}
+
+void
+trm()/*terminate program.*/
+{
+free(bf.a);
+tcsetattr(0,TCSANOW,&otos);
+}
+void
+raw()/*enter raw terminal mode.*/
+{
+	struct termios tos;
+	tcgetattr(0,&tos);
+	otos=tos;
+	if(atexit(&trm)!=0){write(2,"cannot set an exit function.\n",29);exit(1);}
+	tos.c_lflag&=~(ECHO|ECHONL|ICANON|ISIG);
+	tos.c_iflag&=~(IXON|ICRNL);
+	tos.c_oflag&=~OPOST;/*prevent terminal from treating \n as \n\r.*/
+	tos.c_cc[VMIN]=1;
+	tos.c_cc[VTIME]=0;
+	tcsetattr(0,TCSANOW,&tos);
+}
+
+void
+updm()/*update mode indicator.*/
+{
+write(1,MVTL,6);
+WRVID((mod?"1":"0"),1);
+}
+
+void
+updfnm()/*update filename.*/
+{
+WRVID(fnm,strlen(fnm));
+}
+
+void
+upda()/*update all.*/
+{
+	updm();
+	write(1,MVR,3);
+	updfnm();
+	gbfdpl();
+}
+
+void
+sv()/*save file.*/
+{
+dprintf(2,"SAVING FILE.\n");
+int fd=open("sav",O_WRONLY,O_TRUNC);
+if(fd==-1){dprintf(2,"cannot open file %s: %s.\n","sav",strerror(errno));}
+char wbf[RWBFSZ];
+if(bf.gst>0){dprintf(2,"more 0\n");}
+/*TODO: need loop here.*/
+int csz=bf.gst>RWBFSZ?RWBFSZ:bf.gst;
+memcpy(&wbf,bf.a,bf.gst);
+write(fd,&wbf,bf.gst);
+int ri=bf.gst+bf.gsz;
+int rl=bf.sz-ri;
+memcpy(&wbf,bf.a+ri,rl);
+write(fd,&wbf,rl);
+if(close(fd)==-1){dprintf(2,"cannot close file %s: %s.\n","sav",strerror(errno));}
+}
+
+int
+main(int argc,char** argv)/*main func. involves main loop.*/
+{
+	if(argc>2){write(2,"too many args.\n",15);exit(1);}
+	/*FOR DEBUG ONLY.*/
+	write(2,"",0);
+	raw();
+	write(1,ERSA,4);
+	if(ioctl(1,TIOCGWINSZ,&wsz)==-1){dprintf(2,"cannot get win size: %s.\n",strerror(errno));exit(1);}
+	gbfini();
+	if(argc==2)
+	{
+		fnm=argv[1];
+		int fd=open(fnm,O_RDWR);
+		if(fd==-1){dprintf(2,"cannot open file %s: %s.\n",fnm,strerror(errno));exit(1);}
+		ssize_t rb;
+		char rbf[RWBFSZ];
+		while((rb=read(fd,&rbf,RWBFSZ)))
+		{
+			bf.a=realloc(bf.a,bf.sz+rb);
+			if(bf.a==NULL){write(2,"cannot realloc buffer.\n",23);exit(1);}
+			memcpy(bf.a+bf.sz,&rbf,rb);
+			bf.sz+=rb;
+		}
+		if(rb==-1){dprintf(2,"cannot read file %s: %s.\n",fnm,strerror(errno));exit(1);}
+		if(close(fd)==-1){dprintf(2,"cannot close file %s: %s.\n",fnm,strerror(errno));exit(1);}
+	}
+	upda();
+	SYCUR();
+	unsigned char c;
+	gbflsi(1);
+	while(1)
+	{
+		if(read(0,&c,1)>0)
+		{
+			switch(c)
+			{
+				case CTR('q'):{exit(0);}
+				case CTR('j'):
+				{
+					mod^=1;
+					updm();
+					dprintf(2,"row:%d, col:%d\n",row,col);
+					SYCUR();
+					break;
+				}
+				case CTR('s'):{sv();break;}
+				/*TODO: make a macro.*/
+				case 'j':{if(!mod){gbfb();break;}goto pc;}
+				case ';':{if(!mod){gbff();break;}goto pc;}
+				case 'l':{if(!mod){gbfd();break;}goto pc;}
+				case 'k':{if(!mod){gbfu();break;}goto pc;}
+				case 'd':{if(!mod){gbfdf();break;}goto pc;}
+				case 's':{if(!mod){gbfdb();break;}goto pc;}
+				case 'e':{if(!mod){gbfel();break;}goto pc;}
+				case 'r':{if(!mod){gbfelr();break;}goto pc;}
+				case 'h':{if(!mod){gbfsd();break;}goto pc;}
+				case 'u':{if(!mod){gbfsu();break;}goto pc;}
+				case 8:case 127:{if(mod)gbfdb();break;}
+				default:
+				{
+					if(mod!=1||c<32||c>126)break;
+					pc:/*print char label.*/
+					gbfinsc(c);
+					write(1,&c,1);col++;
+					gbfdplrstl();					
+				}
+			}
+		}
+	}
+}
