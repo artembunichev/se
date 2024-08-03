@@ -72,7 +72,7 @@ int i=1;/*current string idx.*/
 while(z/=10)l++;/*count integer length.*/
 *s=malloc(l+1);/*alloc memory for result string.*/
 /*TODO: add macro.*/
-if(s==NULL){dprintf(2,"cannot alloc memory.\n");exit(1);}
+if(!s){dprintf(2,"cannot alloc memory.\n");exit(1);}
 (*s)[l]='\0';/*start building up a string from the end.so we start from null byte.*/
 do{(*s)[l-i]=(x%10)+'0';/*convert digit to ascii char.*/
 x/=10;
@@ -82,14 +82,15 @@ i++;/*go to next digit.*/
 
 void
 scur(unsigned char r,unsigned char c){/*set terminal cursor to row and column(only visual).*/
-char* rs=NULL;char* cs=NULL;/*row string,col string.*/
-char* s=NULL;/*string carrying the command to set terminal cursor.*/
+char* rs=0;/*row string.*/
+char* cs=0;/*col string.*/
+char* s=0;/*string carrying the command to set terminal cursor.*/
 int sl;/*command-string length.*/
 itos(r,&rs);itos(c,&cs);/*convert row and col to strings.*/
 sl=strlen(rs)+strlen(cs)+4;/*calc command length(4 stands for \x1b[ + ; + H).*/
 s=malloc(sl+1);/*alloc memory for command string (+null byte).*/
 /*TODO: add macro.*/
-if(s==NULL){dprintf(2,"cannot alloc memory.\n");exit(1);}
+if(!s){dprintf(2,"cannot alloc memory.\n");exit(1);}
 strcpy(s,"\x1b[");/*building a command string.*/
 strcat(s,rs);
 strcat(s,";");
@@ -108,7 +109,7 @@ gbfini()/*init gap buffer.*/
 	bf.sz=BFISZ;/*set buf size to predefined one.*/
 	bf.a=malloc(BFISZ);/*alloc memory for buf array.*/
 	/*TODO:macro.*/
-	if(bf.a==NULL){write(2,"cannot alloc buffer array.\n",27);exit(1);}
+	if(!bf.a){write(2,"cannot alloc buffer array.\n",27);exit(1);}
 	bf.gst=0;bf.gsz=BFISZ;/*place gap at 0 idx.*/
 }
 
@@ -125,7 +126,7 @@ gbfxpnd(int d)
 	bf.gsz+=d;
 	bf.a=realloc(bf.a,bf.sz);/*realloc buffer array to new size.*/
 	/*TODO: macro.*/
-	if(bf.a==NULL){write(2,"cannot realloc buffer array.\n",29);exit(1);}
+	if(!bf.a){write(2,"cannot realloc buffer array.\n",29);exit(1);}
 	/*copy all arr content starting from gap pos to the very end of arr (for contents last char to be the
 	last char in the arr) in order to fill the "holes" appear after realloc. we do not need to swap
 	holes and content as long as we can treat everything placed within gap boundaries as trash
@@ -341,7 +342,7 @@ j=i-1;
 dprintf(2,"2i: %d, j:%d\n",i,j);while(r<wsz.ws_row&&++j<bf.sz){if(bf.a[j]=='\n'){r++;}}
 wl=j-i+r;
 /*TODO: macro.*/
-char* w=malloc(wl);if(w==NULL){dprintf(2,"cannot alloc memory.\n");exit(1);}
+char* w=malloc(wl);if(!w){dprintf(2,"cannot alloc memory.\n");exit(1);}
 for(z=i;z<j;++z){
 if(bf.a[z]=='\n'){
 	memcpy(w+k,"\n\r",2);k+=2;/*move term cursor to line start after every \n (mimic \r).*/
@@ -464,7 +465,7 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 		{
 			bf.a=realloc(bf.a,bf.sz+rb);
 			/*TODO: macro.*/
-			if(bf.a==NULL){write(2,"cannot realloc buffer.\n",23);exit(1);}
+			if(!bf.a){write(2,"cannot realloc buffer.\n",23);exit(1);}
 			memcpy(bf.a+bf.sz,&rbf,rb);
 			bf.sz+=rb;
 		}
