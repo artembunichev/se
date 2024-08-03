@@ -46,28 +46,36 @@
 #define SYCUR() scur(row,col)
 
 /*gap buffer.sz-size(gap inclusive) a-arr gst-gap start gsz-gap size.*/
-typedef struct{size_t sz;char* a;int gst;size_t gsz;}gbf;
+typedef struct{
+size_t sz;
+char* a;
+int gst;
+size_t gsz;
+}gbf;
 /*original termios. we'll use it to restore original terminal settings.*/
 struct termios otos;
 /*term win size.*/
-struct winsize wsz={0};
-/*editor mode. 0-navigate 1-edit.*/
-char mod=0;
+struct winsize wsz;
 /*text buffer(the only one).*/
-gbf bf={0};
+gbf bf;
+int
 /*topmost buffer line(for scroll).*/
-int bfl=0;
+bfl
+/*cursor position.row and column respectively.*/
+,row
+,col;
+/*editor mode. 0-navigate 1-edit.*/
+char mod;
 /*filename of currently edited file.*/
 char* fnm;
-/*cursor position.row and column respectively.*/
-int row=2;
-int col=1;
 
 /*own function for calculating string length.*/
 int
 strl(char* s){
-int i=0;/*string iterator.*/
-int l=0;/*length of the string.*/
+int i/*string iterator.*/
+,l;/*length of the string.*/
+i=0;
+l=0;
 while(s[i]){++l;++i;}
 return l;
 }
@@ -75,9 +83,12 @@ return l;
 void
 itos(unsigned char x,char** s)/*integer to str.*/
 {
-int l=1;/*integer length(number of digits).*/
-int z=x;/*tmp variable for counting length.*/
-int i=1;/*current string idx.*/
+int l/*integer length(number of digits).*/
+,z/*tmp variable for counting length.*/
+,i;/*current string idx.*/
+l=1;
+z=x;
+i=1;
 while(z/=10)l++;/*count integer length.*/
 *s=malloc(l+1);/*alloc memory for result string.*/
 /*TODO: add macro.*/
@@ -149,8 +160,11 @@ gbfxpnd(int d)
 void
 gbflsi(int l)/*idx of first char in line.*/
 {
-int n=0;int i=0;/*n-line count.*/
+int n/*line count.*/
+,i;
 if(!bf.gst)i=bf.gst+bf.gsz;
+n=0;
+i=0;
 while(n<l){
 	if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
 	if(bf.a[i]=='\n')++n;
@@ -171,8 +185,9 @@ gbfinsc(char c)/*insert char.*/
 void
 gbfinss(char* s)/*insert string.*/
 {
-	int sl=strl(s);/*lenght of inserted str.*/
-	int i;
+	int sl/*lenght of inserted string.*/
+	,i;
+	sl=strl(s);
 	/*if gap hasn't got enough space for string-expaind buf.*/
 	if(bf.gsz<sl)gbfxpnd(sl-bf.gsz+BFXPNS);
 	i=0;
@@ -180,14 +195,20 @@ gbfinss(char* s)/*insert string.*/
 	bf.gst+=sl;bf.gsz-=sl;/*move gap to the right(forward).*/
 }
 
-void gbfdplrst(){/*disply rest of the buffer.*/
-int x=bf.gst+bf.gsz;write(1,bf.a+x,bf.sz-x);/*display everything what is after gap.*/
+/*disply rest of the buffer.*/
+void gbfdplrst(){
+int x;
+x=bf.gst+bf.gsz;
+write(1,bf.a+x,bf.sz-x);/*display everything what is after gap.*/
 SYCUR();/*sync term cursor 'cause it's now in the end of the text.*/
 }
 
-void gbfdplrstl(){/*display rest of the current line.*/
-int u=bf.gst+bf.gsz;/*first aftergap idx.*/
-int i=u;/*iterator and next \n or eof idx at the same time.*/
+/*display rest of the current line.*/
+void gbfdplrstl(){
+int u/*first aftergap idx.*/
+,i;/*iterator and next \n or eof idx at the same time.*/
+u=bf.gst+bf.gsz;
+i=u;
 while(i<bf.sz&&bf.a[i]!='\n')++i;/*find idx of next \n or eof.*/
 write(1,bf.a+u,i-u);/*print all the chars between gap end and closes \n or eof.*/
 SYCUR();/*sync term cur 'cause it's now in the end of line.*/
@@ -196,7 +217,8 @@ SYCUR();/*sync term cur 'cause it's now in the end of line.*/
 void
 gbfdf()/*delete one char forward.*/
 {
-int agi=bf.gst+bf.gsz;/*first aftergap idx.*/
+int agi;/*first aftergap idx.*/
+agi=bf.gst+bf.gsz;
 if(agi==bf.sz)return;/*we can't delete forward if cursor is in the end of text.*/
 bf.gsz++;/*deleting forward is equal to shifting right gap boundary forward.*/
 /*if we've deleted \n char then we need to move line below up and append it to the end. it requires us to
@@ -246,9 +268,11 @@ gbfdplrstl();
 void
 gbfel()/*erase the line cursor is currently on.*/
 {
+int i
+,j;
 /*TODO:to func.*/
-int i=bf.gst;
-int j=bf.gst+bf.gsz-1;
+i=bf.gst;
+j=bf.gst+bf.gsz-1;
 while(i>0&&bf.a[--i]!='\n');
 i+=!!i;
 /*TODO:to func.*/
@@ -260,8 +284,9 @@ col=1;SYCUR();write(1,ERSLA,4);
 void
 gbfelr()/*erase current line to the right.*/
 {
+int i;
 /*TODO:to func.*/
-int i=bf.gst+bf.gsz-1;
+i=bf.gst+bf.gsz-1;
 while(++i<bf.sz-1&&bf.a[i]!='\n');i+=i==bf.sz-1;
 bf.gsz=i-bf.gst;
 write(1,ERSLF,4);
@@ -269,14 +294,16 @@ write(1,ERSLF,4);
 
 void
 gbff()/*move cursor forward.*/
-{int nxi=bf.gst+bf.gsz;
-	if(nxi==bf.sz)return;
-	bf.a[bf.gst]=bf.a[nxi];
-	if(bf.a[bf.gst]=='\n'){row++;col=1;SYCUR();}
-	else{col++;write(1,MVR,3);}
-	bf.gst++;
-	/*FOR DEBUG ONLY.*/
-	gbflsi(1);
+{
+int nxi;
+nxi=bf.gst+bf.gsz;
+if(nxi==bf.sz)return;
+bf.a[bf.gst]=bf.a[nxi];
+if(bf.a[bf.gst]=='\n'){row++;col=1;SYCUR();}
+else{col++;write(1,MVR,3);}
+++bf.gst;
+/*FOR DEBUG ONLY.*/
+gbflsi(1);
 }
 
 void
@@ -317,8 +344,10 @@ if(j<bf.gst)
 void
 gbfd()/*move cursor down.*/
 {
-int i=bf.gst+bf.gsz;
-int j=1;
+int i
+,j;
+i=bf.gst+bf.gsz;
+j=1;
 while(bf.a[i]!='\n'){if(i>bf.sz)return;++i;}
 while((i+j)<bf.sz&&bf.a[i+j]!='\n'&&j<col)++j;
 dprintf(2,"I:%d,bfsz:%d,J:%d\n",i,bf.sz,j);
@@ -334,8 +363,10 @@ SYCUR();
 void
 gbfu()/*move cursor up.*/
 {
-int i=bf.gst;
-int j=i;
+int i
+,j;
+i=bf.gst;
+j=i;
 while(bf.a[--i]!='\n')if(i<0)return;
 while(--j>=0&&bf.a[j]!='\n');
 --row;
@@ -346,17 +377,22 @@ gbfj(j+col);
 void
 gbfdpl()/*display buffer(display \n as \n\r without modifying original text).*/
 {
-int n=0;
-int i=0;
-int r=1;
-int j;
-int wl;
-int k=0;
-int z;
+int n
+,i
+,r
+,j
+,wl
+,k
+,z;
+n=0;
+i=0;
+r=1;
+k=0;
 write(1,MVBFST,6);
 while(n<bfl&&i<bf.sz){
 if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
-if(bf.a[i]=='\n')++n;++i;
+if(bf.a[i]=='\n')++n;
+++i;
 }
 j=i-1;
 dprintf(2,"2i: %d, j:%d\n",i,j);
@@ -367,7 +403,9 @@ char* w=malloc(wl);if(!w){dprintf(2,"cannot alloc memory.\n");exit(1);}
 z=i;
 while(z<j){
 if(bf.a[z]=='\n'){
-	memcpy(w+k,"\n\r",2);k+=2;/*move term cursor to line start after every \n (mimic \r).*/
+/*move term cursor to line start after every \n (mimic \r).*/
+memcpy(w+k,"\n\r",2);
+k+=2;
 }
 else{w[k]=bf.a[z];++k;}
 ++z;
@@ -471,6 +509,12 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 	ssize_t rb;
 	char rbf[RWBFSZ];
 	unsigned char c;
+	wsz=(struct winsize){0};
+	bf=(gbf){0};
+	bfl=0;
+	mod=0;
+	row=2;
+	col=1;
 	/*TODO: macro.*/
 	if(argc>2){write(2,"too many args.\n",15);exit(1);}
 	/*FOR DEBUG ONLY.*/
