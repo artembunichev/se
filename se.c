@@ -8,6 +8,21 @@
 #include<string.h>
 #include<stdio.h>
 
+/*macro for allocating memory+checking if it has been successfull.
+identifer,
+size for alloction,
+name of parent function(for logging),
+length of parent function name+identifier name length accumulatively.*/
+#define A(I,S,P,L)if(!(I=malloc(S))){write(2,"cant alloc "#P"#"#I".\n",14+L);return 1;}
+/*macro like the one above,but for realloc.*/
+#define R(I,T,S,P,L)if(!(I=realloc(T,S))){write(2,"cant realloc "#P"#"#I".\n",16+L);return 1;}
+/*error-if&termination macro.
+condition,message,its length.*/
+#define E(C,M,L)if(C){write(2,#M,L);return 1;}
+/*exit() versions of macros above.*/
+#define AE(I,S,P,L)if(!(I=malloc(S))){write(2,"cant alloc "#P"#"#I".\n",14+L);exit(1);}
+#define RE(I,T,S,P,L)if(!(I=realloc(T,S))){write(2,"cant realloc "#P"#"#I".\n",16+L);exit(1);}
+#define EE(C,M,L)if(C){write(2,#M,L);exit(1);}
 /*move cursor up.*/
 #define MVU "\x1b[A"
 /*move cursor down.*/
@@ -90,9 +105,7 @@ l=1;
 z=x;
 i=1;
 while(z/=10)l++;/*count integer length.*/
-*s=malloc(l+1);/*alloc memory for result string.*/
-/*TODO: add macro.*/
-if(!s){dprintf(2,"cannot alloc memory.\n");exit(1);}
+AE(*s,l+1,itos,6)/*alloc memory for result string.*/
 (*s)[l]='\0';/*start building up a string from the end.so we start from null byte.*/
 do{(*s)[l-i]=(x%10)+'0';/*convert digit to ascii char.*/
 x/=10;
@@ -108,9 +121,7 @@ char* s=0;/*string carrying the command to set terminal cursor.*/
 int sl;/*command-string length.*/
 itos(r,&rs);itos(c,&cs);/*convert row and col to strings.*/
 sl=strl(rs)+strl(cs)+4;/*calc command length(4 stands for \x1b[ + ; + H).*/
-s=malloc(sl+1);/*alloc memory for command string (+null byte).*/
-/*TODO: add macro.*/
-if(!s){dprintf(2,"cannot alloc memory.\n");exit(1);}
+AE(s,sl+1,scur,5)/*alloc memory for command string (+null byte).*/
 strcpy(s,"\x1b[");/*building a command string.*/
 strcat(s,rs);
 strcat(s,";");
@@ -127,9 +138,7 @@ void
 gbfini()/*init gap buffer.*/
 {
 	bf.sz=BFISZ;/*set buf size to predefined one.*/
-	bf.a=malloc(BFISZ);/*alloc memory for buf array.*/
-	/*TODO:macro.*/
-	if(!bf.a){write(2,"cannot alloc buffer array.\n",27);exit(1);}
+	AE(bf.a,BFISZ,gbfini,10)/*alloc memory for buf array.*/
 	bf.gst=0;bf.gsz=BFISZ;/*place gap at 0 idx.*/
 }
 
@@ -144,9 +153,7 @@ gbfxpnd(int d)
 	buffer is expanded by 3 hence gap size is now 3 too (we assume we'll call expand function only when
 	current gap size is 0)).*/
 	bf.gsz+=d;
-	bf.a=realloc(bf.a,bf.sz);/*realloc buffer array to new size.*/
-	/*TODO: macro.*/
-	if(!bf.a){write(2,"cannot realloc buffer array.\n",29);exit(1);}
+	RE(bf.a,bf.a,bf.sz,gbfxpnd,11)/*realloc buffer array to new size.*/
 	/*copy all arr content starting from gap pos to the very end of arr (for contents last char to be the
 	last char in the arr) in order to fill the "holes" appear after realloc. we do not need to swap
 	holes and content as long as we can treat everything placed within gap boundaries as trash
@@ -388,6 +395,7 @@ n=0;
 i=0;
 r=1;
 k=0;
+char* w;
 write(1,MVBFST,6);
 while(n<bfl&&i<bf.sz){
 if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
@@ -398,8 +406,7 @@ j=i-1;
 dprintf(2,"2i: %d, j:%d\n",i,j);
 while(r<wsz.ws_row&&++j<bf.sz)if(bf.a[j]=='\n')++r;
 wl=j-i+r;
-/*TODO: macro.*/
-char* w=malloc(wl);if(!w){dprintf(2,"cannot alloc memory.\n");exit(1);}
+AE(w,wl,gbfdpl,7)
 z=i;
 while(z<j){
 if(bf.a[z]=='\n'){
@@ -445,8 +452,8 @@ raw()/*enter raw terminal mode.*/
 	struct termios tos;
 	tcgetattr(0,&tos);
 	otos=tos;
-	/*TODO: macro.*/
-	if(atexit(&trm)){write(2,"cannot set an exit function.\n",29);exit(1);}
+	/*atexit returns 0 if successfull.*/
+	EE(atexit(&trm),cant set an exit function.\n,27)
 	tos.c_lflag&=~(ECHO|ECHONL|ICANON|ISIG);
 	tos.c_iflag&=~(IXON|ICRNL);
 	tos.c_oflag&=~OPOST;/*prevent terminal from treating \n as \n\r.*/
@@ -486,11 +493,10 @@ int csz;
 int ri;
 int rl;
 dprintf(2,"SAVING FILE.\n");
-/*TODO: macro.*/
 fd=open("sav",O_WRONLY,O_TRUNC);
-if(fd==-1){dprintf(2,"cannot open file %s: %s.\n","sav",strerror(errno));}
+EE(fd<0,cant open file for save.\n,25)
 if(bf.gst>0){dprintf(2,"more 0\n");}
-/*TODO: need loop here.*/
+/*TODO: need a loop here.*/
 csz=bf.gst>RWBFSZ?RWBFSZ:bf.gst;
 memcpy(&wbf,bf.a,bf.gst);
 write(fd,&wbf,bf.gst);
@@ -498,8 +504,7 @@ ri=bf.gst+bf.gsz;
 rl=bf.sz-ri;
 memcpy(&wbf,bf.a+ri,rl);
 write(fd,&wbf,rl);
-/*TODO: macro.*/
-if(close(fd)==-1){dprintf(2,"cannot close file %s: %s.\n","sav",strerror(errno));}
+EE(close(fd)<0,cant save file.\n,17)
 }
 
 int
@@ -515,33 +520,26 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 	mod=0;
 	row=2;
 	col=1;
-	/*TODO: macro.*/
-	if(argc>2){write(2,"too many args.\n",15);exit(1);}
+	E(argc>2,too many args.\n,15)
 	/*FOR DEBUG ONLY.*/
 	write(2,"",0);
 	raw();
 	write(1,ERSA,4);
-	/*TODO: macro.*/
-	if(ioctl(1,TIOCGWINSZ,&wsz)==-1){dprintf(2,"cannot get win size: %s.\n",strerror(errno));exit(1);}
+	E(ioctl(1,TIOCGWINSZ,&wsz)<0,cant get winsize.\n,18)
 	gbfini();
 	if(argc==2)
 	{
 		fnm=argv[1];
 		fd=open(fnm,O_RDWR);
-		/*TODO: macro.*/
-		if(fd==-1){dprintf(2,"cannot open file %s: %s.\n",fnm,strerror(errno));exit(1);}
+		E(fd<0,cant open target.\n,18)
 		while((rb=read(fd,&rbf,RWBFSZ))>0)
 		{
-			bf.a=realloc(bf.a,bf.sz+rb);
-			/*TODO: macro.*/
-			if(!bf.a){write(2,"cannot realloc buffer.\n",23);exit(1);}
-			memcpy(bf.a+bf.sz,&rbf,rb);
-			bf.sz+=rb;
+		R(bf.a,bf.a,bf.sz+rb,main,8)
+		memcpy(bf.a+bf.sz,&rbf,rb);
+		bf.sz+=rb;
 		}
-		/*TODO: macro.*/
-		if(rb==-1){dprintf(2,"cannot read file %s: %s.\n",fnm,strerror(errno));exit(1);}
-		/*TODO: macro.*/
-		if(close(fd)==-1){dprintf(2,"cannot close file %s: %s.\n",fnm,strerror(errno));exit(1);}
+		E(rb<0,cant read target.\n,18)
+		E(close(fd)<0,cant close target.\n,19)
 	}
 	upda();
 	SYCUR();
