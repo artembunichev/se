@@ -446,21 +446,6 @@ trm()/*terminate program.*/
 free(bf.a);
 tcsetattr(0,TCSANOW,&otos);
 }
-void
-raw()/*enter raw terminal mode.*/
-{
-	struct termios tos;
-	tcgetattr(0,&tos);
-	otos=tos;
-	/*atexit returns 0 if successfull.*/
-	EE(atexit(&trm),cant set an exit function.\n,27)
-	tos.c_lflag&=~(ECHO|ECHONL|ICANON|ISIG);
-	tos.c_iflag&=~(IXON|ICRNL);
-	tos.c_oflag&=~OPOST;/*prevent terminal from treating \n as \n\r.*/
-	tos.c_cc[VMIN]=1;
-	tos.c_cc[VTIME]=0;
-	tcsetattr(0,TCSANOW,&tos);
-}
 
 void
 updm()/*update mode indicator.*/
@@ -510,6 +495,7 @@ EE(close(fd)<0,cant save file.\n,17)
 int
 main(int argc,char** argv)/*main func. involves main loop.*/
 {
+	struct termios tos;
 	int fd;
 	ssize_t rb;
 	char rbf[RWBFSZ];
@@ -523,7 +509,18 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 	E(argc>2,too many args.\n,15)
 	/*FOR DEBUG ONLY.*/
 	write(2,"",0);
-	raw();
+	/*enter raw terminal mode.*/
+	tcgetattr(0,&tos);
+	otos=tos;
+	/*atexit returns 0 if successfull.*/
+	EE(atexit(&trm),cant set an exit function.\n,27)
+	tos.c_lflag&=~(ECHO|ECHONL|ICANON|ISIG);
+	tos.c_iflag&=~(IXON|ICRNL);
+	tos.c_oflag&=~OPOST;/*prevent terminal from treating \n as \n\r.*/
+	tos.c_cc[VMIN]=1;
+	tos.c_cc[VTIME]=0;
+	tcsetattr(0,TCSANOW,&tos);
+	/*finish entering raw mode here.*/
 	write(1,ERSA,4);
 	E(ioctl(1,TIOCGWINSZ,&wsz)<0,cant get winsize.\n,18)
 	gbfini();
