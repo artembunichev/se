@@ -180,7 +180,6 @@ while(n<l){
 	if(bf.a[i]=='\n')++n;
 	++i;
 }
-dprintf(2,"line %d first char at %d\n",l,i);
 }
 
 void
@@ -314,6 +313,7 @@ else{col++;write(1,MVR,3);}
 ++bf.gst;
 /*FOR DEBUG ONLY.*/
 gbflsi(1);
+dprintf(2,"forw:row:%d, col:%d\n",row,col);
 }
 
 void
@@ -331,6 +331,7 @@ gbfb()/*move cursor backward.*/
 	}else{--col;write(1,MVL,3);}
 	/*FOR DEBUG ONLY.*/
 	gbflsi(1);
+	dprintf(2,"backw:row:%d, col:%d\n",row,col);
 }
 
 void
@@ -360,7 +361,6 @@ i=bf.gst+bf.gsz;
 j=1;
 while(bf.a[i]!='\n'){if(i>bf.sz)return;++i;}
 while((i+j)<bf.sz&&bf.a[i+j]!='\n'&&j<col)++j;
-dprintf(2,"I:%d,bfsz:%d,J:%d\n",i,bf.sz,j);
 gbfj(i+j);
 ++row;
 if(j==col)write(1,MVD,3);
@@ -368,6 +368,7 @@ else{
 col=j;
 SYCUR();
 }
+dprintf(2,"down:row:%d, col:%d\n",row,col);
 }
 
 void
@@ -376,12 +377,13 @@ gbfu()/*move cursor up.*/
 int i
 ,j;
 i=bf.gst;
-j=i;
 while(bf.a[--i]!='\n')if(i<0)return;
+j=i;
 while(--j>=0&&bf.a[j]!='\n');
 --row;
 if(col>i-j){col=i-j;SYCUR();}else write(1,MVU,3);
 gbfj(j+col);
+dprintf(2,"up:row:%d, col:%d\n",row,col);
 }
 
 void
@@ -406,7 +408,6 @@ if(bf.a[i]=='\n')++n;
 ++i;
 }
 j=i-1;
-dprintf(2,"2i: %d, j:%d\n",i,j);
 while(r<wsz.ws_row&&++j<bf.sz)if(bf.a[j]=='\n')++r;
 wl=j-i+r;
 AE(w,wl,gbfdpl,7)
@@ -420,7 +421,6 @@ k+=2;
 else{w[k]=bf.a[z];++k;}
 ++z;
 }
-dprintf(2,"2i: %d, n: %d, j:%d, r:%d,wl:%d,k:%d\n",i,n,j,r,wl,k);
 memcpy(w+k,ERSF,3);
 write(1,w,wl);
 free(w);
@@ -431,7 +431,6 @@ void
 gbfsd()/*scroll screen down.*/
 {
 ++bfl;gbfdpl();if(row==2){gbfd();--row;}else{gbfu();++row;}
-dprintf(2,"gst now: %d\n",bf.gst);
 }
 
 void
@@ -480,10 +479,8 @@ char wbf[RWBFSZ];
 int csz;
 int ri;
 int rl;
-dprintf(2,"SAVING FILE.\n");
 fd=open("sav",O_WRONLY,O_TRUNC);
 EE(fd<0,cant open file for save.\n,25)
-if(bf.gst>0){dprintf(2,"more 0\n");}
 /*TODO: need a loop here.*/
 csz=bf.gst>RWBFSZ?RWBFSZ:bf.gst;
 memcpy(&wbf,bf.a,bf.gst);
@@ -556,7 +553,6 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 			{
 				mod^=1;
 				updm();
-				dprintf(2,"row:%d, col:%d\n",row,col);
 				SYCUR();
 				break;
 			}
