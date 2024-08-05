@@ -204,7 +204,7 @@ gbfinss(char* s)/*insert string.*/
 	bf.gst+=sl;bf.gsz-=sl;/*move gap to the right(forward).*/
 }
 
-/*disply rest of the buffer.*/
+/*display rest of the buffer.*/
 void gbfdplrst(){
 int x;
 x=bf.gst+bf.gsz;
@@ -265,7 +265,7 @@ gbfdplrst();/*reprint everything after cursor.*/
 else{/*if char we've deleted is not a \n.*/
 --col;/*move cursor back one char horizontally.*/
 /*we don't necessary need to sync here (although we stll can) 'cause in
-this case it's more simpler to move cursor left by appropriate esc-sequence.*/
+this case it's much simpler to move cursor left by appropriate esc-sequence.*/
 write(1,MVL,3);/*so move cursor left.*/
 /*as far as we didn't move any line, deletion operation affected only current
 line, so we need to redraw only it.*/
@@ -442,6 +442,24 @@ gbfu();
 gbfdpl();
 }
 
+/*move cursor to the line end.*/
+void
+gbfle(){
+int i/*index of next \n or eof.*/
+/*how many character are between old and new
+cursor position(for setting col).*/
+,j
+,o;/*overflow flag. if i goes out of buffer.*/
+i=j=bf.gst+bf.gsz;
+o=0;
+while(i<bf.sz&&bf.a[i]!='\n')++i;
+if(i==bf.sz){i=bf.sz-1;o=1;};
+gbfj(i);
+//dprintf(2,"i:%d D:%d,col:%d\n",i,j,col);
+col+=i-j+o;
+SYCUR();
+}
+
 void
 trm()/*terminate program.*/
 {
@@ -541,10 +559,8 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 	upda();
 	SYCUR();
 	gbflsi(1);
-	while(1)
-	{
-		if(read(0,&c,1)>0)
-		{
+	while(1){
+		if(read(0,&c,1)>0){
 			switch(c){
 			/*q.*/
 			case CTR(113):return 0;
@@ -556,6 +572,14 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 				SYCUR();
 				break;
 			}
+			/*by default, terminal emulator
+			does not recognize CTRL+; sequence. so in order
+			to detect it I did remap CTRL+; to ESC character. and now
+			when I press CTRL+; ESC is sent so we need to handle it(0 char).
+			but bear in mind it's actually CTRL+;.
+			as a feature, esc also does the same thing as CTRL+; does, but
+			I don't care.*/
+			case CTR(27):{gbfle();break;}
 			/*s.*/
 			case CTR(115):{sv();break;}
 			/*j.*/
