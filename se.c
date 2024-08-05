@@ -564,15 +564,17 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 			switch(c){
 			/*q.*/
 			case CTR(113):return 0;
-			/*j.*/
-			case CTR(106):
-			{
+			/*well, alt+j can't be detected so easily that's why
+			I decided to remap ALT+j key sequence into CTRL+\
+			(which produces code 28). so treat this fancy 28 as
+			ALT+j actually.*/
+			case 28:{
 				mod^=1;
 				updm();
 				SYCUR();
 				break;
 			}
-			/*by default, terminal emulator
+			/*the same story as with alt+j: by default, terminal emulator
 			does not recognize CTRL+; sequence. so in order
 			to detect it I did remap CTRL+; to ESC character. and now
 			when I press CTRL+; ESC is sent so we need to handle it(0 char).
