@@ -342,12 +342,12 @@ int d;
 if(j<0||j>bf.sz||j==bf.gst||(j>bf.gst&&j<bf.gst+bf.gsz))return;
 if(j<bf.gst)
 {
-	memcpy(bf.a+j+bf.gsz,bf.a+j,bf.gst-j);
+	memmove(bf.a+j+bf.gsz,bf.a+j,bf.gst-j);
 	bf.gst=j;
 }else{
 	e=bf.gst+bf.gsz;
 	d=j-e;
-	memcpy(bf.a+bf.gst,bf.a+e,d);
+	memmove(bf.a+bf.gst,bf.a+e,d);
 	bf.gst+=d;
 }
 }
@@ -445,19 +445,15 @@ gbfdpl();
 /*move cursor to the line end.*/
 void
 gbfle(){
-int i/*index of next \n or eof.*/
-/*how many character are between old and new
-cursor position(for setting col).*/
-,j
-,o;/*overflow flag. if i goes out of buffer.*/
-i=j=bf.gst+bf.gsz;
-o=0;
-while(i<bf.sz&&bf.a[i]!='\n')++i;
-if(i==bf.sz){i=bf.sz-1;o=1;};
-gbfj(i);
-//dprintf(2,"i:%d D:%d,col:%d\n",i,j,col);
-col+=i-j+o;
+int i;/*index of next \n or eof.*/
+i=bf.gst+bf.gsz;
+while(bf.a[i]!='\n'&&i<bf.sz)++i;
+if(i!=bf.gst+bf.gsz){
+col+=i-bf.gst-bf.gsz;
 SYCUR();
+gbfj(i);
+}
+}
 }
 
 void
