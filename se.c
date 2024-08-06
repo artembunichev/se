@@ -454,6 +454,18 @@ SYCUR();
 gbfj(i);
 }
 }
+
+/*move cursor to the line start.*/
+void
+gbfls(){
+int i;/*idx of a character that is next to the previous \n.*/
+i=bf.gst;/*if previous character is \n then next one is bf.gst.*/
+while(i>0&&bf.a[i-1]!='\n')--i;/*find the position of i.*/
+if(i!=bf.gst){
+col-=bf.gst-i;
+SYCUR();
+gbfj(i);
+}
 }
 
 void
@@ -578,6 +590,7 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 			as a feature, esc also does the same thing as CTRL+; does, but
 			I don't care.*/
 			case CTR(27):{gbfle();break;}
+			case CTR(106):{gbfls();break;}
 			/*s.*/
 			case CTR(115):{sv();break;}
 			/*j.*/
