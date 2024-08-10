@@ -1,3 +1,21 @@
+/*se-stupid text editor.
+alt+j-switch modes
+mode 0(navigation+basic editing):
+	j-cursor left,
+	k-cursor top,
+	l-cursor down,
+	;-cursor right,
+	a-move cursor to line start,
+	d-move cursor to line end,
+	f-delete one character forward,
+	s-delete one character backward,
+	e-erase whole current line.
+mode 1-insert mode.
+in any mode:
+	ctrl+s-save buffer into original file.
+	ctrl+q-exit program with saving.
+	alt+q-exit program without saving the buffer
+	(do not expect silly hints that you forgot to save the file).*/
 #include<termios.h>
 #include<unistd.h>
 #include<fcntl.h>
@@ -168,21 +186,6 @@ gbfxpnd(int d)
 }
 
 void
-gbflsi(int l)/*idx of first char in line.*/
-{
-int n/*line count.*/
-,i;
-if(!bf.gst)i=bf.gst+bf.gsz;
-n=0;
-i=0;
-while(n<l){
-	if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
-	if(bf.a[i]=='\n')++n;
-	++i;
-}
-}
-
-void
 gbfinsc(char c)/*insert char.*/
 {
 	/*if there is no enough space for gap-expand buf.*/
@@ -311,8 +314,6 @@ bf.a[bf.gst]=bf.a[nxi];
 if(bf.a[bf.gst]=='\n'){row++;col=1;SYCUR();}
 else{col++;write(1,MVR,3);}
 ++bf.gst;
-/*FOR DEBUG ONLY.*/
-gbflsi(1);
 dprintf(2,"forw:row:%d, col:%d\n",row,col);
 }
 
@@ -329,8 +330,6 @@ gbfb()/*move cursor backward.*/
 		while(i&&bf.a[i--]!='\n');
 		col=bf.gst-i-(!!i);SYCUR();
 	}else{--col;write(1,MVL,3);}
-	/*FOR DEBUG ONLY.*/
-	gbflsi(1);
 	dprintf(2,"backw:row:%d, col:%d\n",row,col);
 }
 
@@ -469,7 +468,7 @@ gbfj(i);
 }
 
 void
-trm()/*terminate program.*/
+trm()/*terminate the program.*/
 {
 free(bf.a);
 tcsetattr(0,TCSANOW,&otos);
@@ -566,13 +565,12 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 	}
 	upda();
 	SYCUR();
-	gbflsi(1);
 	while(1){
 		if(read(0,&c,1)>0){
 			switch(c){
-			/*q.*/
+			/*ctrl+q.*/
 			case CTR(113):return 0;
-			/*well, alt+j can't be detected so easily that's why
+			/*alt+j can't be detected so easily that's why
 			I decided to remap ALT+j key sequence into CTRL+\
 			(which produces code 28). so treat this fancy 28 as
 			ALT+j actually.*/
@@ -582,16 +580,7 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 				SYCUR();
 				break;
 			}
-			/*the same story as with alt+j: by default, terminal emulator
-			does not recognize CTRL+; sequence. so in order
-			to detect it I did remap CTRL+; to ESC character. and now
-			when I press CTRL+; ESC is sent so we need to handle it(0 char).
-			but bear in mind it's actually CTRL+;.
-			as a feature, esc also does the same thing as CTRL+; does, but
-			I don't care.*/
-			case CTR(27):{gbfle();break;}
-			case CTR(106):{gbfls();break;}
-			/*s.*/
+			/*ctrl+s.*/
 			case CTR(115):{sv();break;}
 			/*j.*/
 			AC(106,gbfb)
@@ -601,10 +590,14 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 			AC(108,gbfd)
 			/*k.*/
 			AC(107,gbfu)
+			/*a.*/
+			AC(97,gbfls)
 			/*d.*/
-			AC(100,gbfdf)
+			AC(100,gbfle)
 			/*s.*/
 			AC(115,gbfdb)
+			/*f.*/
+			AC(102,gbfdf)
 			/*e.*/
 			AC(101,gbfel)
 			/*r.*/
