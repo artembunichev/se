@@ -101,7 +101,8 @@ bfl
 ,row
 ,col;
 /*editor mode. 0-navigate 1-edit.*/
-char mod;
+char mod
+,iso;/*is isolated mode(when executed without target file).*/
 /*filename of currently edited file.*/
 char* fnm;
 
@@ -530,15 +531,16 @@ WRVID(fnm,strl(fnm));
 void
 upda()/*update all.*/
 {
-	updm();
-	write(1,MVR,3);
-	updfnm();
-	gbfdpla();
+updm();
+write(1,MVR,3);
+if(!iso)updfnm();
+gbfdpla();
 }
 
 void
-sv()/*save file.*/
+sv()/*save file (only if not in isolated mode).*/
 {
+dprintf(2,"SAVE!\n");
 int fd;
 char wbf[RWBFSZ];
 int csz;
@@ -565,105 +567,111 @@ clerr(){write(2,ERSA,4);write(2,MVTL,6);}
 int
 main(int argc,char** argv)/*main func. involves main loop.*/
 {
-	struct termios tos;
-	int fd;
-	ssize_t rb;
-	char rbf[RWBFSZ];
-	unsigned char c;
-	wsz=(struct winsize){0};
-	bf=(gbf){0};
-	bfl=0;
-	mod=0;
-	row=2;
-	col=1;
-	E(argc>2,too many args.\n,15)
-	/*FOR DEBUG ONLY.*/
-	write(2,"",0);
-	/*enter raw terminal mode.*/
-	tcgetattr(0,&tos);
-	otos=tos;
-	/*atexit returns 0 if successfull.*/
-	EE(atexit(&trm),cant set an exit function.\n,27)
-	tos.c_lflag&=~(ECHO|ECHONL|ICANON|ISIG);
-	tos.c_iflag&=~(IXON|ICRNL);
-	tos.c_oflag&=~OPOST;/*prevent terminal from treating \n as \n\r.*/
-	tos.c_cc[VMIN]=1;
-	tos.c_cc[VTIME]=0;
-	tcsetattr(0,TCSANOW,&tos);
-	/*finish entering raw mode here.*/
-	write(1,ERSA,4);
-	E(ioctl(1,TIOCGWINSZ,&wsz)<0,cant get winsize.\n,18)
-	gbfini();
-	if(argc==2)
+struct termios tos;
+int fd;
+ssize_t rb;
+char rbf[RWBFSZ];
+unsigned char c;
+wsz=(struct winsize){0};
+bf=(gbf){0};
+bfl=0;
+mod=0;
+iso=0;
+row=2;
+col=1;
+E(argc>2,too many args.\n,15)
+/*if not target file is specified,then enter isolated mode.
+since is this case empty buffer is going to be created,it'll be
+nice to set mod to 1(insert) by default.*/
+if(argc==1){
+iso=1;
+mod=1;
+}
+/*enter raw terminal mode.*/
+tcgetattr(0,&tos);
+otos=tos;
+/*atexit returns 0 if successfull.*/
+EE(atexit(&trm),cant set an exit function.\n,27)
+tos.c_lflag&=~(ECHO|ECHONL|ICANON|ISIG);
+tos.c_iflag&=~(IXON|ICRNL);
+tos.c_oflag&=~OPOST;/*prevent terminal from treating \n as \n\r.*/
+tos.c_cc[VMIN]=1;
+tos.c_cc[VTIME]=0;
+tcsetattr(0,TCSANOW,&tos);
+/*finish entering raw mode here.*/
+write(1,ERSA,4);
+E(ioctl(1,TIOCGWINSZ,&wsz)<0,cant get winsize.\n,18)
+gbfini();
+if(argc==2)
+{
+	fnm=argv[1];
+	fd=open(fnm,O_RDWR);
+	E(fd<0,cant open target.\n,18)
+	while((rb=read(fd,&rbf,RWBFSZ))>0)
 	{
-		fnm=argv[1];
-		fd=open(fnm,O_RDWR);
-		E(fd<0,cant open target.\n,18)
-		while((rb=read(fd,&rbf,RWBFSZ))>0)
-		{
-		R(bf.a,bf.a,bf.sz+rb,main,8)
-		memcpy(bf.a+bf.sz,&rbf,rb);
-		bf.sz+=rb;
-		}
-		E(rb<0,cant read target.\n,18)
-		E(close(fd)<0,cant close target.\n,19)
+	R(bf.a,bf.a,bf.sz+rb,main,8)
+	memcpy(bf.a+bf.sz,&rbf,rb);
+	bf.sz+=rb;
 	}
-	upda();
-	SYCUR();
-	while(1){
-		if(read(0,&c,1)>0){
-			switch(c){
-			/*ctrl+q.*/
-			case CTR(113):return 0;
-			/*alt+j can't be detected so easily that's why
-			I decided to remap ALT+j key sequence into CTRL+\
-			(which produces code 28). so treat this fancy 28 as
-			ALT+j actually.*/
-			case 28:{
-				mod^=1;
-				updm();
-				SYCUR();
-				break;
-			}
-			/*ctrl+s.*/
-			case CTR(115):{sv();break;}
-			/*\. CLEAR stderr fiel.FOR DEBUG ONLY.*/
-			AC(92,clerr)
-			/*]. print buffer. FOR DEBUG ONLY.*/
-			AC(93,pbuf)
-			/*j.*/
-			AC(106,gbfb)
-			/*;.*/
-			AC(59,gbff)
-			/*l.*/
-			AC(108,gbfd)
-			/*k.*/
-			AC(107,gbfu)
-			/*a.*/
-			AC(97,gbfls)
-			/*d.*/
-			AC(100,gbfle)
-			/*s.*/
-			AC(115,gbfdb)
-			/*f.*/
-			AC(102,gbfdf)
-			/*e.*/
-			AC(101,gbfel)
-			/*h.*/
-			AC(104,gbfsd)
-			/*u.*/
-			AC(117,gbfsu)
-			/*backspace.*/
-			case 8:case 127:{if(mod)gbfdb();break;}
-			default:{
-			if(mod!=1||c<32||c>126)break;
-			pc:/*print char label.*/
-			gbfinsc(c);
-			write(1,&c,1);
-			++col;
-			gbfdplrstl();					
-			}
-			}
+	E(rb<0,cant read target.\n,18)
+	E(close(fd)<0,cant close target.\n,19)
+}
+upda();
+SYCUR();
+while(1){
+	if(read(0,&c,1)>0){
+		switch(c){
+		/*ctrl+q.*/
+		case CTR(113):return 0;
+		/*alt+j can't be detected so easily that's why
+		I decided to remap ALT+j key sequence into CTRL+\
+		(which produces code 28). so treat this fancy 28 as
+		ALT+j actually.*/
+		case 28:{
+			mod^=1;
+			updm();
+			SYCUR();
+			break;
+		}
+		/*ctrl+s.*/
+		case CTR(115):{if(!iso)sv();break;}
+		/*\. CLEAR stderr fiel.FOR DEBUG ONLY.*/
+		AC(92,clerr)
+		/*]. print buffer. FOR DEBUG ONLY.*/
+		AC(93,pbuf)
+		/*j.*/
+		AC(106,gbfb)
+		/*;.*/
+		AC(59,gbff)
+		/*l.*/
+		AC(108,gbfd)
+		/*k.*/
+		AC(107,gbfu)
+		/*a.*/
+		AC(97,gbfls)
+		/*d.*/
+		AC(100,gbfle)
+		/*s.*/
+		AC(115,gbfdb)
+		/*f.*/
+		AC(102,gbfdf)
+		/*e.*/
+		AC(101,gbfel)
+		/*h.*/
+		AC(104,gbfsd)
+		/*u.*/
+		AC(117,gbfsu)
+		/*backspace.*/
+		case 8:case 127:{if(mod)gbfdb();break;}
+		default:{
+		if(mod!=1||c<32||c>126)break;
+		pc:/*print char label.*/
+		gbfinsc(c);
+		write(1,&c,1);
+		++col;
+		gbfdplrstl();					
+		}
 		}
 	}
+}
 }
