@@ -15,7 +15,10 @@ in any mode:
 	ctrl+s-save buffer into original file.
 	ctrl+q-exit program with saving.
 	alt+q-exit program without saving the buffer
-	(do not expect silly hints that you forgot to save the file).*/
+	(do not expect silly hints that you forgot to save the file).
+when invoked without file as a target, isolated mode is entered.
+it's almost the same as regular one, but buffer can not be saved into a
+file in any way.*/
 #include<termios.h>
 #include<unistd.h>
 #include<fcntl.h>
