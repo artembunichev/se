@@ -105,6 +105,22 @@ char mod;
 /*filename of currently edited file.*/
 char* fnm;
 
+/*print buffer.
+FOR DEBUG ONLY.*/
+void
+pbuf(){
+int i;
+i=0;
+while(i<bf.sz){
+if(i==bf.gst||i==bf.gst+bf.gsz)dprintf(2,"======\n");
+if(i>=bf.gst&&i<bf.gst+bf.gsz)dprintf(2,"[%d]:#\n",i);
+else if(bf.a[i]==10) dprintf(2,"[%d]:\\n\n",i);
+else if(bf.a[i]==32) dprintf(2,"[%d]:\\s\n",i);
+else dprintf(2,"[%d]:%c\n",i,bf.a[i]);
+++i;
+}
+}
+
 /*own function for calculating string length.*/
 int
 strl(char* s){
@@ -207,12 +223,59 @@ gbfinss(char* s)/*insert string.*/
 	bf.gst+=sl;bf.gsz-=sl;/*move gap to the right(forward).*/
 }
 
+/*display buffer(display \n as \n\r
+without modifying original text).*/
+void
+gbfdpl(int i,int e)/*i-start position,e-end position.*/
+{
+int n
+,r
+,j
+,wl
+,k
+,z;
+n=0;
+r=1;
+k=0;
+char* w;
+while(n<bfl&&i<e){
+if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
+if(bf.a[i]=='\n')++n;
+++i;
+}
+j=i-1;
+while(r<wsz.ws_row&&++j<bf.sz)if(bf.a[j]=='\n')++r;
+wl=j-i+r;
+AE(w,wl,gbfdpl,7)
+z=i;
+while(z<j){
+if(bf.a[z]=='\n'){
+/*move term cursor to line start after every \n (mimic \r).*/
+memcpy(w+k,"\n\r",2);
+k+=2;
+}
+else{w[k]=bf.a[z];++k;}
+++z;
+}
+memcpy(w+k,ERSF,3);
+write(1,w,wl);
+free(w);
+SYCUR();
+}
+
+/*displat whole buffer.*/
+void
+gbfdpla()
+{
+	write(1,MVBFST,6);
+	gbfdpl(0,bf.sz);
+}
+
 /*display rest of the buffer.*/
-void gbfdplrst(){
-int x;
-x=bf.gst+bf.gsz;
-write(1,bf.a+x,bf.sz-x);/*display everything what is after gap.*/
-SYCUR();/*sync term cursor 'cause it's now in the end of the text.*/
+void
+gbfdplrst(){
+dprintf(2,"DPLRST!\n");
+gbfdpl(bf.gst+bf.gsz,bf.sz);
 }
 
 /*display rest of the current line.*/
@@ -278,30 +341,60 @@ gbfdplrstl();
 }
 
 void
-gbfel()/*erase the line cursor is currently on.*/
+gbfj(int j)/*jump to idx.*/
 {
-int i
-,j;
-/*TODO:to func.*/
-i=bf.gst;
-j=bf.gst+bf.gsz-1;
-while(i>0&&bf.a[--i]!='\n');
-i+=!!i;
-/*TODO:to func.*/
-while(++j<bf.sz-1&&bf.a[j]!='\n');j+=j==bf.sz-1;
-bf.gst=i;bf.gsz=j-i;
-col=1;SYCUR();write(1,ERSLA,4);
+int e;
+int d;
+if(j<0||j>bf.sz||j==bf.gst||(j>bf.gst&&j<bf.gst+bf.gsz))return;
+if(j<bf.gst)
+{
+	memmove(bf.a+j+bf.gsz,bf.a+j,bf.gst-j);
+	bf.gst=j;
+}else{
+	e=bf.gst+bf.gsz;
+	d=j-e;
+	memmove(bf.a+bf.gst,bf.a+e,d);
+	bf.gst+=d;
+}
 }
 
+/*was the hardest stuff for me.*/
 void
-gbfelr()/*erase current line to the right.*/
-{
-int i;
-/*TODO:to func.*/
-i=bf.gst+bf.gsz-1;
-while(++i<bf.sz-1&&bf.a[i]!='\n');i+=i==bf.sz-1;
-bf.gsz=i-bf.gst;
-write(1,ERSLF,4);
+gbfel(){/*erase the line cursor is currently on (\n including).*/
+int s/*new gap start.*/
+,e/*new gap end.*/
+,ie;/*initial value of e(since e is going to be modified later).*/
+s=bf.gst-1;
+e=bf.gst+bf.gsz;
+while(s>0&&bf.a[s]!='\n')--s;/*find s.*/
+while(e<bf.sz&&bf.a[e]!='\n')++e;/*find e.*/
+ie=e;/*remember initial e value.*/
+/*set new gap start.*/
+if(s!=-1){
+	if(e!=bf.sz)++s;
+	else s=s+!s;
+}else ++s;
+/*set new gap end.*/
+if(e==bf.sz)--e;
+bf.gst=s;
+bf.gsz=e-s+1;
+col=1;
+/*if we've just erased last line, it means that now
+we would go one line above.
+but we want to leave cursor steady if buffer
+is empty(actually, we need to jump up only if
+line above exists).*/
+if(ie==bf.sz){
+int p;/*idx of previous \n(can be -1).*/
+p=bf.gst-1;
+while(p!=-1&&bf.a[p]!='\n')--p;
+if(bf.a[s]!=10&&!p)p=-1;
+gbfj(p+1);
+row!=2&&--row;
+}
+SYCUR();
+write(1,ERSF,3);
+gbfdplrst();
 }
 
 void
@@ -320,35 +413,23 @@ dprintf(2,"forw:row:%d, col:%d\n",row,col);
 void
 gbfb()/*move cursor backward.*/
 {
-	int i;
 	if(!bf.gst)return;
 	bf.a[bf.gst+bf.gsz-1]=bf.a[bf.gst-1];
-	bf.gst--;
-	if(bf.a[bf.gst+bf.gsz]=='\n')
-	{--row;
-		i=bf.gst-1;
-		while(i&&bf.a[i--]!='\n');
-		col=bf.gst-i-(!!i);SYCUR();
-	}else{--col;write(1,MVL,3);}
+	--bf.gst;
+	dprintf(2,"backw: bf.gst+bf.gsz:%d,char:%c\n",bf.gst+bf.gsz,bf.a[bf.gst+bf.gsz]);
+	if(bf.a[bf.gst+bf.gsz]=='\n'){
+	int i;/*next char after previous \n.*/
+	--row;
+	i=bf.gst;
+	while(i>0&&bf.a[i-1]!='\n')--i;
+	col=bf.gst-i+1;
+	dprintf(2,"new COL:%d\n",col);
+	SYCUR();
+	}else{
+	--col;
+	write(1,MVL,3);
+	}
 	dprintf(2,"backw:row:%d, col:%d\n",row,col);
-}
-
-void
-gbfj(int j)/*jump to idx.*/
-{
-int e;
-int d;
-if(j<0||j>bf.sz||j==bf.gst||(j>bf.gst&&j<bf.gst+bf.gsz))return;
-if(j<bf.gst)
-{
-	memmove(bf.a+j+bf.gsz,bf.a+j,bf.gst-j);
-	bf.gst=j;
-}else{
-	e=bf.gst+bf.gsz;
-	d=j-e;
-	memmove(bf.a+bf.gst,bf.a+e,d);
-	bf.gst+=d;
-}
 }
 
 void
@@ -386,50 +467,9 @@ dprintf(2,"up:row:%d, col:%d\n",row,col);
 }
 
 void
-gbfdpl()/*display buffer(display \n as \n\r without modifying original text).*/
-{
-int n
-,i
-,r
-,j
-,wl
-,k
-,z;
-n=0;
-i=0;
-r=1;
-k=0;
-char* w;
-write(1,MVBFST,6);
-while(n<bfl&&i<bf.sz){
-if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
-if(bf.a[i]=='\n')++n;
-++i;
-}
-j=i-1;
-while(r<wsz.ws_row&&++j<bf.sz)if(bf.a[j]=='\n')++r;
-wl=j-i+r;
-AE(w,wl,gbfdpl,7)
-z=i;
-while(z<j){
-if(bf.a[z]=='\n'){
-/*move term cursor to line start after every \n (mimic \r).*/
-memcpy(w+k,"\n\r",2);
-k+=2;
-}
-else{w[k]=bf.a[z];++k;}
-++z;
-}
-memcpy(w+k,ERSF,3);
-write(1,w,wl);
-free(w);
-SYCUR();
-}
-
-void
 gbfsd()/*scroll screen down.*/
 {
-++bfl;gbfdpl();if(row==2){gbfd();--row;}else{gbfu();++row;}
+++bfl;gbfdpla();if(row==2){gbfd();--row;}else{gbfu();++row;}
 }
 
 void
@@ -438,7 +478,7 @@ gbfsu()/*scroll screen up.*/
 if(!bfl)return;
 --bfl;
 gbfu();
-gbfdpl();
+gbfdpla();
 }
 
 /*move cursor to the line end.*/
@@ -493,7 +533,7 @@ upda()/*update all.*/
 	updm();
 	write(1,MVR,3);
 	updfnm();
-	gbfdpl();
+	gbfdpla();
 }
 
 void
@@ -516,6 +556,11 @@ memcpy(&wbf,bf.a+ri,rl);
 write(fd,&wbf,rl);
 EE(close(fd)<0,cant save file.\n,17)
 }
+
+/*clear stderr file.
+FOR DEBUG ONLY.*/
+void
+clerr(){write(2,ERSA,4);write(2,MVTL,6);}
 
 int
 main(int argc,char** argv)/*main func. involves main loop.*/
@@ -582,6 +627,10 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 			}
 			/*ctrl+s.*/
 			case CTR(115):{sv();break;}
+			/*\. CLEAR stderr fiel.FOR DEBUG ONLY.*/
+			AC(92,clerr)
+			/*]. print buffer. FOR DEBUG ONLY.*/
+			AC(93,pbuf)
 			/*j.*/
 			AC(106,gbfb)
 			/*;.*/
@@ -600,12 +649,11 @@ main(int argc,char** argv)/*main func. involves main loop.*/
 			AC(102,gbfdf)
 			/*e.*/
 			AC(101,gbfel)
-			/*r.*/
-			AC(114,gbfelr)
 			/*h.*/
 			AC(104,gbfsd)
 			/*u.*/
 			AC(117,gbfsu)
+			/*backspace.*/
 			case 8:case 127:{if(mod)gbfdb();break;}
 			default:{
 			if(mod!=1||c<32||c>126)break;
