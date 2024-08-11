@@ -87,6 +87,8 @@ character,its function in 0 mode.*/
 #define WRVID(S,L)(write(1,RVID,4),write(1,S,L),write(1,VRST,4))
 /*sync terminal visual cursor with buffer cursor position.*/
 #define SYCUR()scur(row,col)
+/*one tab(\t) the same size as (spaces).*/
+#define T 6
 /*debug print.FOR DEBUG ONLY.*/
 #define DP(...)dprintf(2,__VA_ARGS__)
 
@@ -126,6 +128,7 @@ i=0;
 while(i<bf.sz){
 if(i==bf.gst||i==bf.gst+bf.gsz)DP("======\n");
 if(i>=bf.gst&&i<bf.gst+bf.gsz)DP("[%d]:#\n",i);
+else if(bf.a[i]==9) DP("[%d]:\\t\n",i);
 else if(bf.a[i]==10)DP("[%d]:\\n\n",i);
 else if(bf.a[i]==32) DP("[%d]:\\s\n",i);
 else DP("[%d]:%c\n",i,bf.a[i]);
@@ -155,8 +158,8 @@ z=x;
 i=1;
 while(z/=10)l++;/*count integer length.*/
 AE(*s,l+1,itos,6)/*alloc memory for result string.*/
-(*s)[l]='\0';/*start building up a string from the end.so we start from null byte.*/
-do{(*s)[l-i]=(x%10)+'0';/*convert digit to ascii char.*/
+(*s)[l]=0;/*start building up a string from the end.so we start from null byte.*/
+do{(*s)[l-i]=(x%10)+48;/*convert digit to ascii char.*/
 x/=10;
 i++;/*go to next digit.*/
 }while(x);
@@ -271,16 +274,16 @@ k=0;
 char* w;
 while(n<bfl&&i<e){
 if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
-if(bf.a[i]=='\n')++n;
+if(bf.a[i]==10)++n;
 ++i;
 }
 j=i-1;
-while(r<wsz.ws_row&&++j<bf.sz)if(bf.a[j]=='\n')++r;
+while(r<wsz.ws_row&&++j<bf.sz)if(bf.a[j]==10)++r;
 wl=j-i+r;
 AE(w,wl,gbfdpl,7)
 z=i;
 while(z<j){
-if(bf.a[z]=='\n'){
+if(bf.a[z]==10){
 /*move term cursor to line start after every \n (mimic \r).*/
 memcpy(w+k,"\n\r",2);
 k+=2;
@@ -314,7 +317,7 @@ int u/*first aftergap idx.*/
 ,i;/*iterator and next \n or eof idx at the same time.*/
 u=bf.gst+bf.gsz;
 i=u;
-while(i<bf.sz&&bf.a[i]!='\n')++i;/*find idx of next \n or eof.*/
+while(i<bf.sz&&bf.a[i]!=10)++i;/*find idx of next \n or eof.*/
 write(1,bf.a+u,i-u);/*print all the chars between gap end and closes \n or eof.*/
 SYCUR();/*sync term cur 'cause it's now in the end of line.*/
 }
@@ -328,27 +331,26 @@ bf.gsz++;/*deleting forward is equal to shifting right gap boundary forward.*/
 /*if we've deleted \n char then we need to move line below up and append it to the end. it requires us to
 redraw all the text after gap. we do not need to change row/col vars 'cause cursor is still staying on the
 same line.*/
-if(bf.a[agi]=='\n'){write(1,ERSF,3);gbfdplrst();}
+if(bf.a[agi]==10){write(1,ERSF,3);gbfdplrst();}
 /*if char we've deleted is not a \n then we need to redraw only current line.*/
 else{write(1,ERSLF,3);gbfdplrstl();}
 updfnmtch(1);/*don't forget to mark buffer as modified.*/
 }
 
 void
-gbfdb()/*delete one char backward.*/
-{
+gbfdb(){/*delete one char backward.*/
 int i;
 if(!bf.gst)return;/*we can't delete backward if cursor in the begining of the text.*/
 --bf.gst;++bf.gsz;/*deleting backward is equal to shifting left gap boundary backward.*/
 /*if we've deleted \n char then we need to move current line above and append it to the end.*/
-if(bf.a[bf.gst]=='\n'){
+if(bf.a[bf.gst]==10){
 /*iterator and prev \n or ZERO idx. their semantic meanings are not the same.
 actually if we're on the first text line i should points to -1 to have the
 same meaning(idx before first char in line) in case when we're not on the
 first line, but it's easier to organize loop for i to be 0 eventually.
 so we'll just handle this case separately later.*/
 i=bf.gst;
-while(i>0&&bf.a[--i]!='\n');/*find prev \n or zero idx.*/
+while(i>0&&bf.a[--i]!=10);/*find prev \n or zero idx.*/
 /*we do need to change row/col 'cause now cursor should be on the line above.*/
 --row;/*go line above.*/
 /*place cur in the end of previous line (bf.gst-i) is for prev line length
@@ -359,7 +361,12 @@ write(1,ERSF,3);/*erase everything after cursor.*/
 gbfdplrst();/*reprint everything after cursor.*/
 updfnmtch(1);/*buffer has been touched.*/
 }
-else{/*if char we've deleted is not a \n.*/
+else if(bf.a[bf.gst]==9){/*if we've deleted \t.*/
+col-=T;
+write(1,ERSLF,3);
+SYCUR();
+gbfdplrstl();
+} else{/*if char we've deleted is not a \n.*/
 --col;/*move cursor back one char horizontally.*/
 /*we don't necessary need to sync here (although we stll can) 'cause in
 this case it's much simpler to move cursor left by appropriate esc-sequence.*/
@@ -397,8 +404,8 @@ int s/*new gap start.*/
 ,ie;/*initial value of e(since e is going to be modified later).*/
 s=bf.gst-1;
 e=bf.gst+bf.gsz;
-while(s>0&&bf.a[s]!='\n')--s;/*find s.*/
-while(e<bf.sz&&bf.a[e]!='\n')++e;/*find e.*/
+while(s>0&&bf.a[s]!=10)--s;/*find s.*/
+while(e<bf.sz&&bf.a[e]!=10)++e;/*find e.*/
 ie=e;/*remember initial e value.*/
 /*set new gap start.*/
 if(s!=-1){
@@ -418,7 +425,7 @@ line above exists).*/
 if(ie==bf.sz){
 int p;/*idx of previous \n(can be -1).*/
 p=bf.gst-1;
-while(p!=-1&&bf.a[p]!='\n')--p;
+while(p!=-1&&bf.a[p]!=10)--p;
 if(bf.a[s]!=10&&!p)p=-1;
 gbfj(p+1);
 row!=2&&--row;
@@ -430,49 +437,50 @@ updfnmtch(1);/*line has been erased,buffer is touched now.*/
 }
 
 void
-gbff()/*move cursor forward.*/
-{
+gbff(){/*move cursor forward.*/
 int nxi;
 nxi=bf.gst+bf.gsz;
 if(nxi==bf.sz)return;
 bf.a[bf.gst]=bf.a[nxi];
-if(bf.a[bf.gst]=='\n'){row++;col=1;SYCUR();}
+/*handle \n.*/
+if(bf.a[bf.gst]==10){row++;col=1;SYCUR();}
+/*handle \t.*/
+else if(bf.a[bf.gst]==9){col+=T;SYCUR();}
 else{col++;write(1,MVR,3);}
 ++bf.gst;
 DP("forw:row:%d, col:%d\n",row,col);
 }
 
 void
-gbfb()/*move cursor backward.*/
-{
-	if(!bf.gst)return;
-	bf.a[bf.gst+bf.gsz-1]=bf.a[bf.gst-1];
-	--bf.gst;
-	DP("backw: bf.gst+bf.gsz:%d,char:%c\n",bf.gst+bf.gsz,bf.a[bf.gst+bf.gsz]);
-	if(bf.a[bf.gst+bf.gsz]=='\n'){
+gbfb(){/*move cursor backward.*/
+if(!bf.gst)return;
+bf.a[bf.gst+bf.gsz-1]=bf.a[bf.gst-1];
+--bf.gst;
+/*handle \n.*/
+if(bf.a[bf.gst+bf.gsz]==10){
 	int i;/*next char after previous \n.*/
 	--row;
 	i=bf.gst;
-	while(i>0&&bf.a[i-1]!='\n')--i;
+	while(i>0&&bf.a[i-1]!=10)--i;
 	col=bf.gst-i+1;
-	DP("new COL:%d\n",col);
 	SYCUR();
-	}else{
-	--col;
-	write(1,MVL,3);
-	}
-	DP("backw:row:%d, col:%d\n",row,col);
+/*handle \t.*/
+}else if(bf.a[bf.gst+bf.gsz]==9){col-=T;SYCUR();}
+else{
+--col;
+write(1,MVL,3);
+}
+DP("backw:row:%d, col:%d\n",row,col);
 }
 
 void
-gbfd()/*move cursor down.*/
-{
+gbfd(){/*move cursor down.*/
 int i
 ,j;
 i=bf.gst+bf.gsz;
 j=1;
-while(bf.a[i]!='\n'){if(i>bf.sz)return;++i;}
-while((i+j)<bf.sz&&bf.a[i+j]!='\n'&&j<col)++j;
+while(bf.a[i]!=10){if(i>bf.sz)return;++i;}
+while((i+j)<bf.sz&&bf.a[i+j]!=10&&j<col)++j;
 gbfj(i+j);
 ++row;
 if(j==col)write(1,MVD,3);
@@ -484,14 +492,13 @@ DP("down:row:%d, col:%d\n",row,col);
 }
 
 void
-gbfu()/*move cursor up.*/
-{
+gbfu(){/*move cursor up.*/
 int i
 ,j;
 i=bf.gst;
-while(bf.a[--i]!='\n')if(i<0)return;
+while(bf.a[--i]!=10)if(i<0)return;
 j=i;
-while(--j>=0&&bf.a[j]!='\n');
+while(--j>=0&&bf.a[j]!=10);
 --row;
 if(col>i-j){col=i-j;SYCUR();}else write(1,MVU,3);
 gbfj(j+col);
@@ -516,11 +523,13 @@ gbfdpla();
 /*move cursor to the line end.*/
 void
 gbfle(){
-int i;/*index of next \n or eof.*/
+int i/*index of next \n or eof.*/
+,tc;/*tab count.*/
 i=bf.gst+bf.gsz;
-while(bf.a[i]!='\n'&&i<bf.sz)++i;
+tc=0;
+while(bf.a[i]!=10&&i<bf.sz){if(bf.a[i]==9)++tc;++i;}
 if(i!=bf.gst+bf.gsz){
-col+=i-bf.gst-bf.gsz;
+col+=((i-tc)-bf.gst-bf.gsz)+tc*T;
 SYCUR();
 gbfj(i);
 }
@@ -529,11 +538,14 @@ gbfj(i);
 /*move cursor to the line start.*/
 void
 gbfls(){
-int i;/*idx of a character that is next to the previous \n.*/
+int i/*idx of a character that is next to the previous \n.*/
+,tc;/*tab count.*/
 i=bf.gst;/*if previous character is \n then next one is bf.gst.*/
-while(i>0&&bf.a[i-1]!='\n')--i;/*find the position of i.*/
+tc=0;
+/*find the position of i.*/
+while(i>0&&bf.a[i-1]!=10){if(bf.a[i-1]==9)++tc;--i;}
 if(i!=bf.gst){
-col-=bf.gst-i;
+col-=bf.gst-i-tc+tc*T;
 SYCUR();
 gbfj(i);
 }
@@ -706,10 +718,10 @@ while(1){
 		/*if we're not in insert mode or we try
 		to insert a non-alphabet character(\n(10) exclusive)
 		just do nothing.*/
-		if(mod!=1||((c<32||c>126)&&c!=10))break;
+		if(mod!=1||((c<32||c>126)&&c!=10&&c!=9))break;
 		pc:/*print char label.*/
 		gbfinsc(c);
-		if(c==10){/*we need to handle \n case separately.*/
+		if(c==10){/*handle \n case separately.*/
 			write(1,ERSF,3);
 			/*move cursor to the begining of
 			next row.*/
@@ -717,9 +729,17 @@ while(1){
 			col=1;
 			SYCUR();
 			gbfdplrst();
-		}else{
+		}else if(c==9){/*handle \t char.*/
+		write(1,ERSLF,3);
+		col+=T;
+		SYCUR();
+		gbfdplrstl();
+		}else{/*printable characters.*/
 			write(1,&c,1);
 			++col;
+			/*we don't need to call SYCUR here,
+			because writing a char into stdin had aldready
+			moved cursor one position right.*/
 			gbfdplrstl();
 		}
 		updfnmtch(1);/*say that buffer is modified now.*/
