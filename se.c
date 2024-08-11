@@ -211,17 +211,15 @@ gbfxpnd(int d)
 }
 
 void
-gbfinsc(char c)/*insert char.*/
-{
-	/*if there is no enough space for gap-expand buf.*/
-	if(!bf.gsz)gbfxpnd(bf.gsz+BFXPNS+1);
-	bf.a[bf.gst]=c;/*put char before the gap.*/
-	++bf.gst;--bf.gsz;/*move gap to the right(forward).*/
+gbfinsc(char c){/*insert char.*/
+/*if there is no enough space for gap-expand buf.*/
+if(!bf.gsz)gbfxpnd(bf.gsz+BFXPNS+1);
+bf.a[bf.gst]=c;/*put char before the gap.*/
+++bf.gst;--bf.gsz;/*move gap to the right(forward).*/
 }
 
 void
-gbfinss(char* s)/*insert string.*/
-{
+gbfinss(char* s){/*insert string.*/
 int sl/*lenght of inserted string.*/
 ,i;
 sl=strl(s);
@@ -636,6 +634,9 @@ upda();
 SYCUR();
 while(1){
 	if(read(0,&c,1)>0){
+		/*Enter key generates 13(CR) char,
+		but we want to make it 10(NL).*/
+		if(c==13)c=10;
 		switch(c){
 		/*ctrl+q.*/
 		case CTR(113):return 0;
@@ -680,12 +681,25 @@ while(1){
 		/*backspace.*/
 		case 8:case 127:{if(mod)gbfdb();break;}
 		default:{
-		if(mod!=1||c<32||c>126)break;
+		/*if we're not in insert mode or we try
+		to insert a non-alphabet character(\n(10) exclusive)
+		just do nothing.*/
+		if(mod!=1||((c<32||c>126)&&c!=10))break;
 		pc:/*print char label.*/
 		gbfinsc(c);
-		write(1,&c,1);
-		++col;
-		gbfdplrstl();					
+		if(c==10){/*we need to handle \n case separately.*/
+			write(1,ERSF,3);
+			/*move cursor to the begining of
+			next row.*/
+			++row;
+			col=1;
+			SYCUR();
+			gbfdplrst();
+		}else{
+			write(1,&c,1);
+			++col;
+			gbfdplrstl();
+		}					
 		}
 		}
 	}
