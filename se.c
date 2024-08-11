@@ -49,6 +49,8 @@ condition,message,its length.*/
 /*macro for handling ambiguous characters in main loop.
 character,its function in 0 mode.*/
 #define AC(C,F)case C:{if(!mod){F();break;}goto pc;}
+/*move cursor to position.*/
+#define MVPS(R,C)"\x1b["#R";"#C"H"
 /*move cursor up.*/
 #define MVU "\x1b[A"
 /*move cursor down.*/
@@ -110,6 +112,7 @@ bfl
 ,fnml;/*filename length(see fnm below).*/
 /*editor mode. 0-navigate 1-edit.*/
 char mod
+,tch/*has buffer been touched(has any change been made since last save).*/
 ,iso;/*is isolated mode(when executed without target file).*/
 char* fph;/*file path of currently edited file.*/
 char* fnm;/*filename of target file (differs from file path).*/
@@ -177,6 +180,24 @@ strcat(s,"H");
 for it(term) to apply it(str).*/
 write(1,s,sl);
 free(rs);free(cs);/*free memory was reserved for row/col strings.*/
+}
+
+/*update filename.*/
+void
+updfnm(){
+/*mark touched buffer with asterisk.*/
+if(tch)WRVID("*",1);
+WRVID(fnm,fnml);
+}
+
+/*update filename touched status.*/
+void
+updfnmtch(char s){/*status*/
+tch=s;
+write(1,MVPS(1,3),6);
+write(1,ERSLF,3);
+updfnm();
+SYCUR();
 }
 
 /*gap buffer is a main structure for text buffer.*/
@@ -308,6 +329,7 @@ same line.*/
 if(bf.a[agi]=='\n'){write(1,ERSF,3);gbfdplrst();}
 /*if char we've deleted is not a \n then we need to redraw only current line.*/
 else{write(1,ERSLF,3);gbfdplrstl();}
+updfnmtch(1);/*don't forget to mark buffer as modified.*/
 }
 
 void
@@ -333,6 +355,7 @@ col=bf.gst-i+(!i);
 SYCUR();/*sync term cursor with new row/col positions we've just set.*/
 write(1,ERSF,3);/*erase everything after cursor.*/
 gbfdplrst();/*reprint everything after cursor.*/
+updfnmtch(1);/*buffer has been touched.*/
 }
 else{/*if char we've deleted is not a \n.*/
 --col;/*move cursor back one char horizontally.*/
@@ -401,6 +424,7 @@ row!=2&&--row;
 SYCUR();
 write(1,ERSF,3);
 gbfdplrst();
+updfnmtch(1);/*line has been erased,buffer is touched now.*/
 }
 
 void
@@ -528,12 +552,6 @@ WRVID((mod?"1":"0"),1);
 }
 
 void
-updfnm()/*update filename.*/
-{
-WRVID(fnm,fnml);
-}
-
-void
 upda()/*update all.*/
 {
 updm();
@@ -561,6 +579,7 @@ rl=bf.sz-ri;
 memcpy(&wbf,bf.a+ri,rl);
 write(fd,&wbf,rl);
 EE(close(fd)<0,cant save file.\n,17)
+updfnmtch(0);/*reset buffer touched state.*/
 }
 
 /*clear stderr file.
@@ -580,6 +599,7 @@ bf=(gbf){0};
 bfl=0;
 mod=0;
 iso=0;
+tch=0;
 row=2;
 col=1;
 E(argc>2,too many args.\n,15)
@@ -699,7 +719,8 @@ while(1){
 			write(1,&c,1);
 			++col;
 			gbfdplrstl();
-		}					
+		}
+		updfnmtch(1);/*say that buffer is modified now.*/
 		}
 		}
 	}
