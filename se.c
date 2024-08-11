@@ -77,16 +77,16 @@ character,its function in 0 mode.*/
 /*reverse video (it's used for reversing bg and fg colors).*/
 #define RVID "\033[7m"
 /*mask for detecting CTRL.*/
-#define CTR(C) (C&0x1f)
+#define CTR(C)(C&0x1f)
 #define BFISZ 2
 /*buffer expand size.*/
 #define BFXPNS 32
 /*readwrite buf size*/
 #define RWBFSZ 4096
 /*write text in reverse video mode.S-str,L-len.*/
-#define WRVID(S,L) (write(1,RVID,4),write(1,S,L),write(1,VRST,4))
+#define WRVID(S,L)(write(1,RVID,4),write(1,S,L),write(1,VRST,4))
 /*sync terminal visual cursor with buffer cursor position.*/
-#define SYCUR() scur(row,col)
+#define SYCUR()scur(row,col)
 /*debug print.FOR DEBUG ONLY.*/
 #define DP(...)dprintf(2,__VA_ARGS__)
 
@@ -185,17 +185,20 @@ free(rs);free(cs);/*free memory was reserved for row/col strings.*/
 /*update filename.*/
 void
 updfnm(){
+/*activate reverse video mode.*/
+write(1,RVID,4);
 /*mark touched buffer with asterisk.*/
-if(tch)WRVID("*",1);
-WRVID(fnm,fnml);
+if(tch)write(1,"*",1);
+write(1,fnm,fnml);
+/*deactivate reverse video mode.*/
+write(1,VRST,4);
 }
 
 /*update filename touched status.*/
 void
-updfnmtch(char s){/*status*/
+updfnmtch(char s){/*status.*/
 tch=s;
-write(1,MVPS(1,3),6);
-write(1,ERSLF,3);
+write(1,MVPS(1,3) ERSLF,9);
 updfnm();
 SYCUR();
 }
@@ -317,8 +320,7 @@ SYCUR();/*sync term cur 'cause it's now in the end of line.*/
 }
 
 void
-gbfdf()/*delete one char forward.*/
-{
+gbfdf(){/*delete one char forward.*/
 int agi;/*first aftergap idx.*/
 agi=bf.gst+bf.gsz;
 if(agi==bf.sz)return;/*we can't delete forward if cursor is in the end of text.*/
