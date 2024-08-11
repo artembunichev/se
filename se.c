@@ -18,7 +18,9 @@ in any mode:
 	(do not expect silly hints that you forgot to save the file).
 when invoked without file as a target, isolated mode is entered.
 it's almost the same as regular one, but buffer can not be saved into a
-file in any way.*/
+file in any way. it is a text editor,not a file-creator and it won't do this
+stuff for you. so, if you'd like to create a new file, please be so kind as to
+do this with touch(1) or whatever other program you like.*/
 #include<termios.h>
 #include<unistd.h>
 #include<fcntl.h>
