@@ -104,12 +104,13 @@ int
 bfl
 /*cursor position.row and column respectively.*/
 ,row
-,col;
+,col
+,fnml;/*filename length(see fnm below).*/
 /*editor mode. 0-navigate 1-edit.*/
 char mod
 ,iso;/*is isolated mode(when executed without target file).*/
-/*filename of currently edited file.*/
-char* fnm;
+char* fph;/*file path of currently edited file.*/
+char* fnm;/*filename of target file (differs from file path).*/
 
 /*print buffer.
 FOR DEBUG ONLY.*/
@@ -219,14 +220,14 @@ gbfinsc(char c)/*insert char.*/
 void
 gbfinss(char* s)/*insert string.*/
 {
-	int sl/*lenght of inserted string.*/
-	,i;
-	sl=strl(s);
-	/*if gap hasn't got enough space for string-expaind buf.*/
-	if(bf.gsz<sl)gbfxpnd(sl-bf.gsz+BFXPNS);
-	i=0;
-	while(i<sl)bf.a[bf.gst+i]=s[i++];/*insert str chars one by one.*/
-	bf.gst+=sl;bf.gsz-=sl;/*move gap to the right(forward).*/
+int sl/*lenght of inserted string.*/
+,i;
+sl=strl(s);
+/*if gap hasn't got enough space for string-expaind buf.*/
+if(bf.gsz<sl)gbfxpnd(sl-bf.gsz+BFXPNS);
+i=0;
+while(i<sl)bf.a[bf.gst+i]=s[i++];/*insert str chars one by one.*/
+bf.gst+=sl;bf.gsz-=sl;/*move gap to the right(forward).*/
 }
 
 /*display buffer(display \n as \n\r
@@ -529,7 +530,7 @@ WRVID((mod?"1":"0"),1);
 void
 updfnm()/*update filename.*/
 {
-WRVID(fnm,strl(fnm));
+WRVID(fnm,fnml);
 }
 
 void
@@ -542,8 +543,7 @@ gbfdpla();
 }
 
 void
-sv()/*save file (only if not in isolated mode).*/
-{
+sv(){/*save file (only if not in isolated mode).*/
 DP("SAVE!\n");
 int fd;
 char wbf[RWBFSZ];
@@ -569,8 +569,7 @@ void
 clerr(){write(2,ERSA,4);write(2,MVTL,6);}
 
 int
-main(int argc,char** argv)/*main func. involves main loop.*/
-{
+main(int argc,char** argv){/*main func. involves main loop.*/
 struct termios tos;
 int fd;
 ssize_t rb;
@@ -608,8 +607,19 @@ E(ioctl(1,TIOCGWINSZ,&wsz)<0,cant get winsize.\n,18)
 gbfini();
 if(argc==2)
 {
-	fnm=argv[1];
-	fd=open(fnm,O_RDWR);
+	int j,si;/*fph iterator, slash idx.*/
+	fph=argv[1];
+	fd=open(fph,O_RDWR);
+	fnm=fph;
+	j=0;
+	si=-1;
+	/*find last slash(/) idx.*/
+	while(fph[j]!=0){if(fph[j]==47)si=j;++j;}
+	DP("si:%d,j:%d\n",si,j);
+	fnml=j-si-1;/*exclude null-byte.*/
+	AE(fnm,fnml+1,main,8)/*include null-byte.*/
+	j=si;
+	while(++j<=si+fnml+1)fnm[j-si-1]=fph[j];
 	E(fd<0,cant open target.\n,18)
 	while((rb=read(fd,&rbf,RWBFSZ))>0)
 	{
