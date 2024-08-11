@@ -191,7 +191,7 @@ updfnm(){
 /*activate reverse video mode.*/
 write(1,RVID,4);
 /*mark touched buffer with asterisk.*/
-if(tch)write(1,"*",1);
+if(!iso&&tch)write(1,"*",1);
 write(1,fnm,fnml);
 /*deactivate reverse video mode.*/
 write(1,VRST,4);
