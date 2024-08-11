@@ -83,6 +83,8 @@ character,its function in 0 mode.*/
 #define WRVID(S,L) (write(1,RVID,4),write(1,S,L),write(1,VRST,4))
 /*sync terminal visual cursor with buffer cursor position.*/
 #define SYCUR() scur(row,col)
+/*debug print.FOR DEBUG ONLY.*/
+#define DP(...)dprintf(2,__VA_ARGS__)
 
 /*gap buffer.sz-size(gap inclusive) a-arr gst-gap start gsz-gap size.*/
 typedef struct{
@@ -116,11 +118,11 @@ pbuf(){
 int i;
 i=0;
 while(i<bf.sz){
-if(i==bf.gst||i==bf.gst+bf.gsz)dprintf(2,"======\n");
-if(i>=bf.gst&&i<bf.gst+bf.gsz)dprintf(2,"[%d]:#\n",i);
-else if(bf.a[i]==10) dprintf(2,"[%d]:\\n\n",i);
-else if(bf.a[i]==32) dprintf(2,"[%d]:\\s\n",i);
-else dprintf(2,"[%d]:%c\n",i,bf.a[i]);
+if(i==bf.gst||i==bf.gst+bf.gsz)DP("======\n");
+if(i>=bf.gst&&i<bf.gst+bf.gsz)DP("[%d]:#\n",i);
+else if(bf.a[i]==10)DP("[%d]:\\n\n",i);
+else if(bf.a[i]==32) DP("[%d]:\\s\n",i);
+else DP("[%d]:%c\n",i,bf.a[i]);
 ++i;
 }
 }
@@ -278,7 +280,6 @@ gbfdpla()
 /*display rest of the buffer.*/
 void
 gbfdplrst(){
-dprintf(2,"DPLRST!\n");
 gbfdpl(bf.gst+bf.gsz,bf.sz);
 }
 
@@ -411,7 +412,7 @@ bf.a[bf.gst]=bf.a[nxi];
 if(bf.a[bf.gst]=='\n'){row++;col=1;SYCUR();}
 else{col++;write(1,MVR,3);}
 ++bf.gst;
-dprintf(2,"forw:row:%d, col:%d\n",row,col);
+DP("forw:row:%d, col:%d\n",row,col);
 }
 
 void
@@ -420,20 +421,20 @@ gbfb()/*move cursor backward.*/
 	if(!bf.gst)return;
 	bf.a[bf.gst+bf.gsz-1]=bf.a[bf.gst-1];
 	--bf.gst;
-	dprintf(2,"backw: bf.gst+bf.gsz:%d,char:%c\n",bf.gst+bf.gsz,bf.a[bf.gst+bf.gsz]);
+	DP("backw: bf.gst+bf.gsz:%d,char:%c\n",bf.gst+bf.gsz,bf.a[bf.gst+bf.gsz]);
 	if(bf.a[bf.gst+bf.gsz]=='\n'){
 	int i;/*next char after previous \n.*/
 	--row;
 	i=bf.gst;
 	while(i>0&&bf.a[i-1]!='\n')--i;
 	col=bf.gst-i+1;
-	dprintf(2,"new COL:%d\n",col);
+	DP("new COL:%d\n",col);
 	SYCUR();
 	}else{
 	--col;
 	write(1,MVL,3);
 	}
-	dprintf(2,"backw:row:%d, col:%d\n",row,col);
+	DP("backw:row:%d, col:%d\n",row,col);
 }
 
 void
@@ -452,7 +453,7 @@ else{
 col=j;
 SYCUR();
 }
-dprintf(2,"down:row:%d, col:%d\n",row,col);
+DP("down:row:%d, col:%d\n",row,col);
 }
 
 void
@@ -467,7 +468,7 @@ while(--j>=0&&bf.a[j]!='\n');
 --row;
 if(col>i-j){col=i-j;SYCUR();}else write(1,MVU,3);
 gbfj(j+col);
-dprintf(2,"up:row:%d, col:%d\n",row,col);
+DP("up:row:%d, col:%d\n",row,col);
 }
 
 void
@@ -543,7 +544,7 @@ gbfdpla();
 void
 sv()/*save file (only if not in isolated mode).*/
 {
-dprintf(2,"SAVE!\n");
+DP("SAVE!\n");
 int fd;
 char wbf[RWBFSZ];
 int csz;
