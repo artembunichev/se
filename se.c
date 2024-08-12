@@ -582,7 +582,7 @@ char wbf[RWBFSZ];
 int csz;
 int ri;
 int rl;
-fd=open("sav",O_WRONLY,O_TRUNC);
+fd=open(fph,O_WRONLY,O_TRUNC);
 EE(fd<0,cant open file for save.\n,25)
 /*TODO: need a loop here.*/
 csz=bf.gst>RWBFSZ?RWBFSZ:bf.gst;
@@ -592,6 +592,7 @@ ri=bf.gst+bf.gsz;
 rl=bf.sz-ri;
 memcpy(&wbf,bf.a+ri,rl);
 write(fd,&wbf,rl);
+ftruncate(fd,bf.sz-bf.gsz);
 EE(close(fd)<0,cant save file.\n,17)
 updfnmtch(0);/*reset buffer touched state.*/
 }
@@ -685,7 +686,12 @@ while(1){
 			break;
 		}
 		/*ctrl+s.*/
-		case CTR(115):{if(!iso)sv();break;}
+		case CTR(115):{
+		/*actually call save file function only
+		if buffer has been modified since last save.*/
+		if(!iso&&tch)sv();
+		break;
+		}
 		/*\. CLEAR stderr fiel.FOR DEBUG ONLY.*/
 		AC(92,clerr)
 		/*]. print buffer. FOR DEBUG ONLY.*/
