@@ -522,18 +522,34 @@ void
 gbfu(){/*move cursor up.*/
 int i
 ,j
-,t;/*tab count.*/
+,c/*new col.*/
+,p;/*previous col.*/
 i=bf.gst;
-t=0;
+c=1;
+p=1;
 while(bf.a[--i]!=10)if(i<0)return;
 j=i;
-while(--j>=0){
-if(bf.a[j]==10)break;
-if(bf.a[j]==9)++t;
-};
+while(--j>=0){if(bf.a[j]==10)break;}
 --row;
-if(col>i-j){col=i-j;SYCUR();}else write(1,MVU,3);
+if(col>i-j){
+col=i-j;
+SYCUR();
 gbfj(j+col);
+}else{
+/*here we're doing pretty much the
+same thing as in gbfd.*/
+i=j+1;
+while(c<col){
+	if(bf.a[i]==9)c+=T;
+	else ++c;
+	if(col-p<c-col){c=p;break;}
+	p=c;
+	++i;
+}
+if(c==col)write(1,MVU,3);
+else{col=c;SYCUR();}
+gbfj(i);
+}
 DP("up:row:%d, col:%d\n",row,col);
 }
 
