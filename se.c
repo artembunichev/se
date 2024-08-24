@@ -269,18 +269,15 @@ to be printed,so we can quit the procedure right now.*/
 if(s==e)return;
 cmd=0;
 i=s;
-cmdi=i;
+cmdi=0;
 cmds=0;
 n=0;
-write(1,MVBFST,6);
 while(i<e){
 if(i>=bf.gst&&i<bf.gst+bf.gsz){i=bf.gst+bf.gsz;continue;}
-	DP("h0\n");
 if(cmdi>=cmds)RE(cmd,cmd,cmds+=256,gbfdpl,10)
 if(bf.a[i]==10){/*handle \n.*/
 	++n;
 	/*if we don't have enough space for ERSLF(\n\r?).*/
-	DP("h1\n");
 	if(cmdi+5>=cmds)RE(cmd,cmd,cmds+=256,gbfdpl,10)
 	memcpy(cmd+cmdi,ERSLF,3);
 	cmdi+=3;
@@ -288,7 +285,6 @@ if(bf.a[i]==10){/*handle \n.*/
 	memcpy(cmd+cmdi,"\n\r",2);
 	cmdi+=2;
 }else if(bf.a[i]==9){/*handle \t.*/
-	DP("h2,cmd:%d\n",cmds);
 	if(cmdi+3*T>=cmds)RE(cmd,cmd,cmds+=256,gbfdpl,10)
 	j=0;
 	while(j++<T){memcpy(cmd+cmdi,MVR,3);cmdi+=3;};
@@ -297,13 +293,12 @@ cmd[cmdi++]=bf.a[i];
 }
 ++i;
 }
-j=0;
 write(1,cmd,cmdi);
 SYCUR();
 free(cmd);
 }
 
-/*displat whole buffer.*/
+/*display whole buffer.*/
 void
 gbfdpla(){
 	write(1,MVBFST,6);
@@ -313,32 +308,36 @@ gbfdpla(){
 /*display rest of the buffer.*/
 void
 gbfdplrst(){
+write(1,ERSF,3);
 gbfdpl(bf.gst+bf.gsz,bf.sz);
 }
 
 /*display rest of the current line.*/
 void gbfdplrstl(){
-int u/*first aftergap idx.*/
-,i;/*iterator and next \n or eof idx at the same time.*/
-u=bf.gst+bf.gsz;
-i=u;
-while(i<bf.sz&&bf.a[i]!=10)++i;/*find idx of next \n or eof.*/
-write(1,bf.a+u,i-u);/*print all the chars between gap end and closes \n or eof.*/
-SYCUR();/*sync term cur 'cause it's now in the end of line.*/
+int s/*start and end for gbfdpl.*/
+,e;
+write(1,ERSLF,3);
+s=bf.gst+bf.gsz;
+e=s;
+while(e<bf.sz&&bf.a[e]!=10)++e;
+gbfdpl(s,e);
 }
 
 void
 gbfdf(){/*delete one char forward.*/
 int agi;/*first aftergap idx.*/
 agi=bf.gst+bf.gsz;
-if(agi==bf.sz)return;/*we can't delete forward if cursor is in the end of text.*/
-bf.gsz++;/*deleting forward is equal to shifting right gap boundary forward.*/
-/*if we've deleted \n char then we need to move line below up and append it to the end. it requires us to
-redraw all the text after gap. we do not need to change row/col vars 'cause cursor is still staying on the
-same line.*/
-if(bf.a[agi]==10){write(1,ERSF,3);gbfdplrst();}
+if(agi==bf.sz)return;/*we can't delete forward if
+cursor is in the end of text.*/
+bf.gsz++;/*deleting forward is equal to shifting
+right gap boundary forward.*/
+/*if we've deleted \n char then we need to move
+line below up and append it to the end. it requires us to
+redraw all the text after gap. we do not need to change row/col
+vars 'cause cursor is still staying on the same line.*/
+if(bf.a[agi]==10)gbfdplrst();
 /*if char we've deleted is not a \n then we need to redraw only current line.*/
-else{write(1,ERSLF,3);gbfdplrstl();}
+else gbfdplrstl();
 updfnmtch(1);/*don't forget to mark buffer as modified.*/
 }
 
@@ -363,13 +362,11 @@ while(i>0&&bf.a[--i]!=10);/*find prev \n or zero idx.*/
 and +(!i) trick is for handling that semantic difference described above.*/
 col=bf.gst-i+(!i);
 SYCUR();/*sync term cursor with new row/col positions we've just set.*/
-write(1,ERSF,3);/*erase everything after cursor.*/
 gbfdplrst();/*reprint everything after cursor.*/
 updfnmtch(1);/*buffer has been touched.*/
 }
 else if(bf.a[bf.gst]==9){/*if we've deleted \t.*/
 col-=T;
-write(1,ERSLF,3);
 SYCUR();
 gbfdplrstl();
 } else{/*if char we've deleted is not a \n.*/
@@ -379,7 +376,6 @@ this case it's much simpler to move cursor left by appropriate esc-sequence.*/
 write(1,MVL,3);/*so move cursor left.*/
 /*as far as we didn't move any line, deletion operation affected only current
 line, so we need to redraw only it.*/
-write(1,ERSLF,3);
 gbfdplrstl();
 }
 }
@@ -436,7 +432,6 @@ gbfj(p+1);
 row!=2&&--row;
 }
 SYCUR();
-write(1,ERSF,3);
 gbfdplrst();
 updfnmtch(1);/*line has been erased,buffer is touched now.*/
 }
@@ -607,8 +602,7 @@ tcsetattr(0,TCSANOW,&otos);
 }
 
 void
-updm()/*update mode indicator.*/
-{
+updm(){/*update mode indicator.*/
 write(1,MVTL,6);
 WRVID((mod?"1":"0"),1);
 }
@@ -697,7 +691,6 @@ if(argc==2){
 	si=-1;
 	/*find last slash(/) idx.*/
 	while(fph[j]!=0){if(fph[j]==47)si=j;++j;}
-	DP("si:%d,j:%d\n",si,j);
 	fnml=j-si-1;/*exclude null-byte.*/
 	A(fnm,fnml+1,main,8)/*include null-byte.*/
 	j=si;
@@ -772,7 +765,6 @@ while(1){
 		pc:/*print char label.*/
 		gbfinsc(c);
 		if(c==10){/*handle \n case separately.*/
-			write(1,ERSF,3);
 			/*move cursor to the begining of
 			next row.*/
 			++row;
@@ -780,7 +772,6 @@ while(1){
 			SYCUR();
 			gbfdplrst();
 		}else if(c==9){/*handle \t char.*/
-		write(1,ERSLF,3);
 		col+=T;
 		SYCUR();
 		gbfdplrstl();
