@@ -487,16 +487,32 @@ DP("backw:row:%d, col:%d\n",row,col);
 void
 gbfd(){/*move cursor down.*/
 int i
-,j;
+,j
+,c/*new col position.*/
+,p;/*previous col position.*/
 i=bf.gst+bf.gsz;
 j=1;
+c=1;
+p=1;
 while(bf.a[i]!=10){if(i>bf.sz)return;++i;}
-while((i+j)<bf.sz&&bf.a[i+j]!=10&&j<col)++j;
+while((i+j)<bf.sz&&bf.a[i+j]!=10){
+if(bf.a[i+j]==9)c+=T;
+else ++c;
+/*this is basically for tab character,because
+tab character takes T chars,(possibly more than 1) so
+we can place cursor either in the begining of tab or in
+the end of it. and we're going to do this
+depending on what's visually closer to current
+cursor position.*/
+if(col-p<c-col){c=p;break;};
+p=c;
+++j;
+};
 gbfj(i+j);
 ++row;
-if(j==col)write(1,MVD,3);
+if(c==col)write(1,MVD,3);
 else{
-col=j;
+col=c;
 SYCUR();
 }
 DP("down:row:%d, col:%d\n",row,col);
