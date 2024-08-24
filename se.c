@@ -208,33 +208,31 @@ SYCUR();
 
 /*gap buffer is a main structure for text buffer.*/
 void
-gbfini()/*init gap buffer.*/
-{
-	bf.sz=BFISZ;/*set buf size to predefined one.*/
-	AE(bf.a,BFISZ,gbfini,10)/*alloc memory for buf array.*/
-	bf.gst=0;bf.gsz=BFISZ;/*place gap at 0 idx.*/
+gbfini(){/*init gap buffer.*/
+bf.sz=BFISZ;/*set buf size to predefined one.*/
+AE(bf.a,BFISZ,gbfini,10)/*alloc memory for buf array.*/
+bf.gst=0;bf.gsz=BFISZ;/*place gap at 0 idx.*/
 }
 
 /*expand buffer with delta. used the all the gap space was filled
 and it doesn't seem to be the end of input.*/
 void
-gbfxpnd(int d)
-{
-	size_t b=bf.sz-bf.gst;/*how many characters we'll need to shift in order to place more gaps.*/
-	bf.sz+=d;/*increase size variable.*/
-	/*increase gap variable (when we're expanding buffer - we simply add more gaps, so if
-	buffer is expanded by 3 hence gap size is now 3 too (we assume we'll call expand function only when
-	current gap size is 0)).*/
-	bf.gsz+=d;
-	RE(bf.a,bf.a,bf.sz,gbfxpnd,11)/*realloc buffer array to new size.*/
-	/*copy all arr content starting from gap pos to the very end of arr (for contents last char to be the
-	last char in the arr) in order to fill the "holes" appear after realloc. we do not need to swap
-	holes and content as long as we can treat everything placed within gap boundaries as trash
-	example: [1,2,()3,4,5] - sz=5,gst=2,gsz=0 - we want to expand by 5
-	         [1,2,(3,4,5,0,0),0,0,0] - sz=10,gst=2,gsz=5 - zeroes are random data produced by realloc
-	         [1,2,(3,4,5,0,0),3,4,5] - now content without the () is [1,2,3,4,5] as it
-	                                   was in the begining.*/
-	memcpy(bf.a+bf.sz-b,bf.a+bf.gst,b);
+gbfxpnd(int d){
+size_t b=bf.sz-bf.gst;/*how many characters we'll need to shift in order to place more gaps.*/
+bf.sz+=d;/*increase size variable.*/
+/*increase gap variable (when we're expanding buffer - we simply add more gaps, so if
+buffer is expanded by 3 hence gap size is now 3 too (we assume we'll call expand function only when
+current gap size is 0)).*/
+bf.gsz+=d;
+RE(bf.a,bf.a,bf.sz,gbfxpnd,11)/*realloc buffer array to new size.*/
+/*copy all arr content starting from gap pos to the very end of arr (for contents last char to be the
+last char in the arr) in order to fill the "holes" appear after realloc. we do not need to swap
+holes and content as long as we can treat everything placed within gap boundaries as trash
+example: [1,2,()3,4,5] - sz=5,gst=2,gsz=0 - we want to expand by 5
+	      [1,2,(3,4,5,0,0),0,0,0] - sz=10,gst=2,gsz=5 - zeroes are random data produced by realloc
+	      [1,2,(3,4,5,0,0),3,4,5] - now content without the () is [1,2,3,4,5] as it
+	                              was in the begining.*/
+memcpy(bf.a+bf.sz-b,bf.a+bf.gst,b);
 }
 
 void
@@ -257,50 +255,57 @@ while(i<sl)bf.a[bf.gst+i]=s[i++];/*insert str chars one by one.*/
 bf.gst+=sl;bf.gsz-=sl;/*move gap to the right(forward).*/
 }
 
-/*display buffer(display \n as \n\r
-without modifying original text).*/
 void
-gbfdpl(int i,int e)/*i-start position,e-end position.*/
-{
-int n
-,r
-,j
-,wl
-,k
-,z;
+gbfdpl(int s,int e){
+int i
+,cmdi/*cmd index.*/
+,cmds/*cmd size(array).*/
+,n/*new lines.*/
+,j;
+char* cmd;/*command string that will be written to stdout when
+it's completely ready.*/
+/*when start equals end, nothing new is about
+to be printed,so we can quit the procedure right now.*/
+if(s==e)return;
+cmd=0;
+i=s;
+cmdi=i;
+cmds=0;
 n=0;
-r=1;
-k=0;
-char* w;
-while(n<bfl&&i<e){
-if(i==bf.gst){i=bf.gst+bf.gsz;continue;}
-if(bf.a[i]==10)++n;
+write(1,MVBFST,6);
+while(i<e){
+if(i>=bf.gst&&i<bf.gst+bf.gsz){i=bf.gst+bf.gsz;continue;}
+	DP("h0\n");
+if(cmdi>=cmds)RE(cmd,cmd,cmds+=256,gbfdpl,10)
+if(bf.a[i]==10){/*handle \n.*/
+	++n;
+	/*if we don't have enough space for ERSLF(\n\r?).*/
+	DP("h1\n");
+	if(cmdi+5>=cmds)RE(cmd,cmd,cmds+=256,gbfdpl,10)
+	memcpy(cmd+cmdi,ERSLF,3);
+	cmdi+=3;
+	if(n==wsz.ws_row-1)break;
+	memcpy(cmd+cmdi,"\n\r",2);
+	cmdi+=2;
+}else if(bf.a[i]==9){/*handle \t.*/
+	DP("h2,cmd:%d\n",cmds);
+	if(cmdi+3*T>=cmds)RE(cmd,cmd,cmds+=256,gbfdpl,10)
+	j=0;
+	while(j++<T){memcpy(cmd+cmdi,MVR,3);cmdi+=3;};
+}else{
+cmd[cmdi++]=bf.a[i];
+}
 ++i;
 }
-j=i-1;
-while(r<wsz.ws_row&&++j<bf.sz)if(bf.a[j]==10)++r;
-wl=j-i+r;
-AE(w,wl,gbfdpl,7)
-z=i;
-while(z<j){
-if(bf.a[z]==10){
-/*move term cursor to line start after every \n (mimic \r).*/
-memcpy(w+k,"\n\r",2);
-k+=2;
-}
-else{w[k]=bf.a[z];++k;}
-++z;
-}
-memcpy(w+k,ERSF,3);
-write(1,w,wl);
-free(w);
+j=0;
+write(1,cmd,cmdi);
 SYCUR();
+free(cmd);
 }
 
 /*displat whole buffer.*/
 void
-gbfdpla()
-{
+gbfdpla(){
 	write(1,MVBFST,6);
 	gbfdpl(0,bf.sz);
 }
@@ -342,7 +347,8 @@ gbfdb(){/*delete one char backward.*/
 int i;
 if(!bf.gst)return;/*we can't delete backward if cursor in the begining of the text.*/
 --bf.gst;++bf.gsz;/*deleting backward is equal to shifting left gap boundary backward.*/
-/*if we've deleted \n char then we need to move current line above and append it to the end.*/
+/*if we've deleted \n char then we need to move current
+line above and append it to the end.*/
 if(bf.a[bf.gst]==10){
 /*iterator and prev \n or ZERO idx. their semantic meanings are not the same.
 actually if we're on the first text line i should points to -1 to have the
@@ -379,8 +385,7 @@ gbfdplrstl();
 }
 
 void
-gbfj(int j)/*jump to idx.*/
-{
+gbfj(int j){/*jump to idx.*/
 int e;
 int d;
 if(j<0||j>bf.sz||j==bf.gst||(j>bf.gst&&j<bf.gst+bf.gsz))return;
@@ -459,10 +464,16 @@ bf.a[bf.gst+bf.gsz-1]=bf.a[bf.gst-1];
 /*handle \n.*/
 if(bf.a[bf.gst+bf.gsz]==10){
 	int i;/*next char after previous \n.*/
+	int t;/*tab count.*/
+	t=0;
 	--row;
 	i=bf.gst;
-	while(i>0&&bf.a[i-1]!=10)--i;
-	col=bf.gst-i+1;
+	while(i>0){
+	if(bf.a[i-1]==9)++t;
+	if(bf.a[i-1]==10)break;
+	--i;
+	};
+	col=bf.gst-i+((T-1)*t)+1;
 	SYCUR();
 /*handle \t.*/
 }else if(bf.a[bf.gst+bf.gsz]==9){col-=T;SYCUR();}
@@ -494,11 +505,16 @@ DP("down:row:%d, col:%d\n",row,col);
 void
 gbfu(){/*move cursor up.*/
 int i
-,j;
+,j
+,t;/*tab count.*/
 i=bf.gst;
+t=0;
 while(bf.a[--i]!=10)if(i<0)return;
 j=i;
-while(--j>=0&&bf.a[j]!=10);
+while(--j>=0){
+if(bf.a[j]==10)break;
+if(bf.a[j]==9)++t;
+};
 --row;
 if(col>i-j){col=i-j;SYCUR();}else write(1,MVU,3);
 gbfj(j+col);
@@ -629,7 +645,7 @@ mod=1;
 tcgetattr(0,&tos);
 otos=tos;
 /*atexit returns 0 if successfull.*/
-EE(atexit(&trm),cant set an exit function.\n,27)
+E(atexit(&trm),cant set an exit function.\n,27)
 tos.c_lflag&=~(ECHO|ECHONL|ICANON|ISIG);
 tos.c_iflag&=~(IXON|ICRNL);
 tos.c_oflag&=~OPOST;/*prevent terminal from treating \n as \n\r.*/
@@ -640,8 +656,7 @@ tcsetattr(0,TCSANOW,&tos);
 write(1,ERSA,4);
 E(ioctl(1,TIOCGWINSZ,&wsz)<0,cant get winsize.\n,18)
 gbfini();
-if(argc==2)
-{
+if(argc==2){
 	int j,si;/*fph iterator, slash idx.*/
 	fph=argv[1];
 	fd=open(fph,O_RDWR);
@@ -652,7 +667,7 @@ if(argc==2)
 	while(fph[j]!=0){if(fph[j]==47)si=j;++j;}
 	DP("si:%d,j:%d\n",si,j);
 	fnml=j-si-1;/*exclude null-byte.*/
-	AE(fnm,fnml+1,main,8)/*include null-byte.*/
+	A(fnm,fnml+1,main,8)/*include null-byte.*/
 	j=si;
 	while(++j<=si+fnml+1)fnm[j-si-1]=fph[j];
 	E(fd<0,cant open target.\n,18)
@@ -669,17 +684,11 @@ upda();
 SYCUR();
 while(1){
 	if(read(0,&c,1)>0){
-		/*Enter key generates 13(CR) char,
-		but we want to make it 10(NL).*/
-		if(c==13)c=10;
 		switch(c){
 		/*ctrl+q.*/
 		case CTR(113):return 0;
-		/*alt+j can't be detected so easily that's why
-		I decided to remap ALT+j key sequence into CTRL+\
-		(which produces code 28). so treat this fancy 28 as
-		ALT+j actually.*/
-		case 28:{
+		/*ctrl+j*/
+		case 10:{
 			mod^=1;
 			updm();
 			SYCUR();
@@ -721,6 +730,9 @@ while(1){
 		/*backspace.*/
 		case 8:case 127:{if(mod)gbfdb();break;}
 		default:{
+		/*Enter key generates 13(CR) char,
+		but we want to make it 10(NL).*/
+		if(c==13)c=10;
 		/*if we're not in insert mode or we try
 		to insert a non-alphabet character(\n(10) exclusive)
 		just do nothing.*/
