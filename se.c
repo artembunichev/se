@@ -765,6 +765,7 @@ while(1){
 		pc:/*print char label.*/
 		gbfinsc(c);
 		if(c==10){/*handle \n case separately.*/
+			write(1,ERSF,3);
 			/*move cursor to the begining of
 			next row.*/
 			++row;
