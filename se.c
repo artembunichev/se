@@ -380,8 +380,12 @@ gbfdplrstl();
 }
 }
 
+/*jump to idx so the char at this idx position will
+be next to the gap and to the cursor as well.
+example:in order to jump to the begining of the file
+do gbfj(0), to the end of the file-gbfj(bf.sz).*/
 void
-gbfj(int j){/*jump to idx.*/
+gbfj(int j){
 int e;
 int d;
 if(j<0||j>bf.sz||j==bf.gst||(j>bf.gst&&j<bf.gst+bf.gsz))return;
@@ -622,6 +626,12 @@ updfnmtch(1);/*say that buffer is modified now.*/
 }
 
 void
+gbfilb(){/*insert new line below and place cursor there.*/
+gbfle();
+pc(10);
+}
+
+void
 trm(){/*terminate the program.*/
 free(bf.a);
 tcsetattr(0,TCSANOW,&otos);
@@ -751,6 +761,10 @@ while(1){
 		if(!iso&&tch)sv();
 		break;
 		}
+		/*n.*/
+		AC(110,gbfilb)
+		/*ctrl+n.*/
+		case 14:{if(mod==1)gbfilb();break;}
 		/*\. CLEAR stderr fiel.FOR DEBUG ONLY.*/
 		AC(92,clerr)
 		/*]. print buffer. FOR DEBUG ONLY.*/
