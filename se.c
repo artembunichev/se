@@ -301,8 +301,8 @@ free(cmd);
 /*display whole buffer.*/
 void
 gbfdpla(){
-	write(1,MVBFST,6);
-	gbfdpl(0,bf.sz);
+write(1,MVBFST,6);
+gbfdpl(0,bf.sz);
 }
 
 /*display rest of the buffer.*/
@@ -746,7 +746,19 @@ while(1){
 	if(read(0,&c,1)>0){
 		switch(c){
 		/*ctrl+q.*/
-		case CTR(113):return 0;
+		case CTR(113):{/*soft quit the program.*/
+		int i/*iterator that is used to figure
+		out the n var.*/
+		,n;/*number of following \n.*/
+		i=bf.gst+bf.gsz;
+		n=1;
+		while(i<bf.sz&&n<wsz.ws_row){if(bf.a[i]==10)++n;++i;}
+		col=1;
+		row+=n;
+		SYCUR();
+		write(1,ERSLF,3);
+		return 0;
+		}
 		/*ctrl+j*/
 		case 10:{
 			mod^=1;
