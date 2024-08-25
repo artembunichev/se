@@ -48,7 +48,7 @@ condition,message,its length.*/
 #define EE(C,M,L)if(C){write(2,#M,L);exit(1);}
 /*macro for handling ambiguous characters in main loop.
 character,its function in 0 mode.*/
-#define AC(C,F)case C:{if(!mod){F();break;}goto pc;}
+#define AC(C,F)case C:{if(!mod){F();break;}goto pcl;}
 /*move cursor to position.*/
 #define MVPS(R,C)"\x1b["#R";"#C"H"
 /*move cursor up.*/
@@ -595,8 +595,34 @@ gbfj(i);
 }
 
 void
-trm()/*terminate the program.*/
-{
+pc(unsigned char c){/*print char(insert+dpl).*/
+gbfinsc(c);
+if(c==10){/*handle \n case separately.*/
+	write(1,ERSF,3);
+	/*move cursor to the begining of
+	next row.*/
+	++row;
+	col=1;
+	SYCUR();
+	gbfdplrst();
+}else if(c==9){/*handle \t char.*/
+write(1,ERSLF,3);
+col+=T;
+SYCUR();
+gbfdplrstl();
+}else{/*printable characters.*/
+	write(1,&c,1);
+	++col;
+	/*we don't need to call SYCUR here,
+	because writing a char into stdin had already
+	moved cursor one position right.*/
+	gbfdplrstl();
+}
+updfnmtch(1);/*say that buffer is modified now.*/
+}
+
+void
+trm(){/*terminate the program.*/
 free(bf.a);
 tcsetattr(0,TCSANOW,&otos);
 }
@@ -608,8 +634,7 @@ WRVID((mod?"1":"0"),1);
 }
 
 void
-upda()/*update all.*/
-{
+upda(){/*update all.*/
 updm();
 write(1,MVR,3);
 if(!iso)updfnm();
@@ -762,29 +787,8 @@ while(1){
 		to insert a non-alphabet character(\n(10) exclusive)
 		just do nothing.*/
 		if(mod!=1||((c<32||c>126)&&c!=10&&c!=9))break;
-		pc:/*print char label.*/
-		gbfinsc(c);
-		if(c==10){/*handle \n case separately.*/
-			write(1,ERSF,3);
-			/*move cursor to the begining of
-			next row.*/
-			++row;
-			col=1;
-			SYCUR();
-			gbfdplrst();
-		}else if(c==9){/*handle \t char.*/
-		col+=T;
-		SYCUR();
-		gbfdplrstl();
-		}else{/*printable characters.*/
-			write(1,&c,1);
-			++col;
-			/*we don't need to call SYCUR here,
-			because writing a char into stdin had aldready
-			moved cursor one position right.*/
-			gbfdplrstl();
-		}
-		updfnmtch(1);/*say that buffer is modified now.*/
+		pcl:/*print char label.*/
+		pc(c);
 		}
 		}
 	}
