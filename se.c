@@ -363,13 +363,12 @@ and +(!i) trick is for handling that semantic difference described above.*/
 col=bf.gst-i+(!i);
 SYCUR();/*sync term cursor with new row/col positions we've just set.*/
 gbfdplrst();/*reprint everything after cursor.*/
-updfnmtch(1);/*buffer has been touched.*/
 }
 else if(bf.a[bf.gst]==9){/*if we've deleted \t.*/
 col-=T;
 SYCUR();
 gbfdplrstl();
-} else{/*if char we've deleted is not a \n.*/
+}else{/*if char we've deleted is not a \n.*/
 --col;/*move cursor back one char horizontally.*/
 /*we don't necessary need to sync here (although we stll can) 'cause in
 this case it's much simpler to move cursor left by appropriate esc-sequence.*/
@@ -378,6 +377,7 @@ write(1,MVL,3);/*so move cursor left.*/
 line, so we need to redraw only it.*/
 gbfdplrstl();
 }
+updfnmtch(1);/*buffer has been touched.*/
 }
 
 /*jump to idx so the char at this idx position will
