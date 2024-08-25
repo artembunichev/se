@@ -409,14 +409,16 @@ int s/*new gap start.*/
 ,ie;/*initial value of e(since e is going to be modified later).*/
 s=bf.gst-1;
 e=bf.gst+bf.gsz;
-while(s>0&&bf.a[s]!=10)--s;/*find s.*/
+if(!bf.gst&&bf.gst+bf.gsz==bf.sz)return;/*interrupt the procedure,
+'cause buffer is empty and nothing will be erased.*/
+while(s!=-1&&bf.a[s]!=10)--s;/*find s.*/
 while(e<bf.sz&&bf.a[e]!=10)++e;/*find e.*/
 ie=e;/*remember initial e value.*/
 /*set new gap start.*/
-if(s!=-1){
+if(s!=-1){/*if we're about to erase NOT the first line.*/
 	if(e!=bf.sz)++s;
 	else s=s+!s;
-}else ++s;
+}else ++s;/*if we're going to erase the first line.*/
 /*set new gap end.*/
 if(e==bf.sz)--e;
 bf.gst=s;
