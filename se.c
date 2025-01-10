@@ -52,6 +52,8 @@
 #include<stdio.h>
 
 
+#define DBG 0
+
 /** General macros. **/
 /*
 	macro for allocating memory and checking if it has been successful.
@@ -159,8 +161,12 @@
 /* one horizontal tab occupies the same space as `T' whitespaces. */
 #define T 6
 
-/* debug print. FOR DEBUG ONLY. */
-#define DP(...)dprintf(2,__VA_ARGS__)
+#if DBG
+/* Debug print. */
+#define DBGP(...) dprintf(2, __VA_ARGS__)
+#else
+#define DBGP(...) do {} while (0)
+#endif /* DBG. */
 
 
 /** Structures. **/
@@ -231,20 +237,22 @@ die(char* err, ...) {
 	exit(1);
 }
 
-/**DBG print buffer. */
+#if DBG
+/* print internal buffer representation for debug. */
 void
-pbuf() {
+dbgpbuf() {
 	int i = 0;
 	while(i<bf.sz){
-		if (i == bf.gst || i == bf.gst+bf.gsz) DP("======\n");
-		if (i >= bf.gst && i < bf.gst+bf.gsz) DP("[%d]:#\n", i);
-		else if (bf.a[i] == '\t') DP("[%d]:\\t\n", i);
-		else if (bf.a[i] == '\n') DP("[%d]:\\n\n", i);
-		else if (bf.a[i] == ' ') DP("[%d]:\\s\n", i);
-		else DP("[%d]:%c\n", i, bf.a[i]);
+		if (i == bf.gst || i == bf.gst+bf.gsz) DBGP("======\n");
+		if (i >= bf.gst && i < bf.gst+bf.gsz) DBGP("[%d]:#\n", i);
+		else if (bf.a[i] == '\t') DBGP("[%d]:\\t\n", i);
+		else if (bf.a[i] == '\n') DBGP("[%d]:\\n\n", i);
+		else if (bf.a[i] == ' ') DBGP("[%d]:\\s\n", i);
+		else DBGP("[%d]:%c\n", i, bf.a[i]);
 		++i;
 	}
 }
+#endif /* DBG. */
 
 /* cast integer to string. */
 void
@@ -324,10 +332,10 @@ updfnm() {
 	/* mark touched buffer with asterisk. */
 	if (!iso && tcht) write(1,"*",1);
 	
-	write(1,fnm,fnml);
+	write(1, fnm, fnml);
 	
 	/* deactivate reverse video mode. */
-	write(1,VRST,4);
+	write(1, VRST, 4);
 }
 
 /* update file touched status. */
@@ -336,7 +344,7 @@ updfnmtcht(char s) {
 	tcht = s;
 	
 	/* set cursor to the very start and redraw the title. */
-	write(1, MVPS(1,3) ERSLF, 9);
+	write(1, MVPS(1, 3) ERSLF, 9);
 	updfnm();
 	
 	SYCUR();
@@ -855,7 +863,7 @@ gbff() {
 	}
 	
 	++bf.gst;
-	DP("forw:row:%d, col:%d\n",row,col);
+	DBGP("forw. row:%d,col:%d\n", row, col);
 }
 
 /* move cursor to previous character (backward). */
@@ -887,15 +895,15 @@ gbfb() {
 	}
 	/* if previous character is "\t". */
 	else if (bf.a[bf.gst+bf.gsz] == '\t') {
-		col-=T;
+		col -= T;
 		SYCUR();
 	}
 	/* previous character is regular. */
 	else {
 		--col;
-		write(1,MVL,3);
+		write(1, MVL, 3);
 	}
-	DP("backw:row:%d, col:%d\n",row,col);
+	DBGP("backw. row:%d,col:%d\n", row, col);
 }
 
 /* move cursor down (to the next line). */
@@ -944,7 +952,7 @@ gbfd() {
 		col = c;
 		SYCUR();
 	}
-	DP("down:row:%d, col:%d\n",row,col);
+	DBGP("down. row:%d,col:%d\n", row, col);
 }
 
 /* move cursor up (to the previous line). */
@@ -998,7 +1006,7 @@ gbfu() {
 		}
 		gbfj(i);
 	}
-	DP("up:row:%d, col:%d\n",row,col);
+	DBGP("up. row:%d,col:%d\n", row, col);
 }
 
 /* scroll the screen down. */
@@ -1182,7 +1190,7 @@ upda() {
 */
 void
 sv() {
-	DP("SAVE!\n");
+	DBGP("save %s\n", fph);
 	
 	int fd;
 	char wbf[RWBFSZ];
@@ -1213,12 +1221,14 @@ sv() {
 	updfnmtcht(0);
 }
 
-/**DBG clear sterr file. */
+#if DBG
+/* clear standard error file (debugging). */
 void
 clerr() {
 	write(2, ERSA, 4);
 	write(2, MVTL, 6);
 }
+#endif /* DBG. */
 
 /* enter "raw" terminal mode. */
 void rawt() {
@@ -1457,10 +1467,10 @@ main(int argc, char** argv) {
 				if (mod == 1) gbfilb();
 				break;
 			}
-			/**DBG clear stderr file. */
+#if DBG
 			AC('\\', clerr)
-			/**DBG print buffer. */
-			AC(']', pbuf)
+			AC(']', dbgpbuf)
+#endif
 			AC('j', gbfb)
 			AC(';', gbff)
 			AC('l', gbfd)
