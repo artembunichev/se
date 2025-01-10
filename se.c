@@ -245,10 +245,19 @@ dbgpbuf() {
 	while(i<bf.sz){
 		if (i == bf.gst || i == bf.gst+bf.gsz) DBGP("======\n");
 		if (i >= bf.gst && i < bf.gst+bf.gsz) DBGP("[%d]:#\n", i);
-		else if (bf.a[i] == '\t') DBGP("[%d]:\\t\n", i);
-		else if (bf.a[i] == '\n') DBGP("[%d]:\\n\n", i);
-		else if (bf.a[i] == ' ') DBGP("[%d]:\\s\n", i);
-		else DBGP("[%d]:%c\n", i, bf.a[i]);
+		switch (bf.a[i]) {
+		case '\t':
+			DBGP("[%d]:\\t\n", i);
+			break;
+		case '\n':
+			DBGP("[%d]:\\n\n", i);
+			break;
+		case ' ':
+			DBGP("[%d]:\\s\n", i);
+			break;
+		default:
+			DBGP("[%d]:%c\n", i, bf.a[i]);
+		}
 		++i;
 	}
 }
@@ -490,8 +499,8 @@ gbfdpl(int s,int e){
 			RE(cmd, cmd, cmds+=256, gbfdpl, 10);
 		}
 		
-		/* handle "\n" character. */
-		if (bf.a[i] == '\n'){
+		switch (bf.a[i]) {
+		case '\n':
 			++n;
 			
 			/* if we don't have enough space for ERSLF(\n\r?). */
@@ -504,9 +513,8 @@ gbfdpl(int s,int e){
 			if (n == wsz.ws_row-1) break;
 			memcpy(cmd+cmdi, "\n\r", 2);
 			cmdi += 2;
-		}
-		/* handle "\t" character. */
-		else if(bf.a[i] == '\t') {
+			break;
+		case '\t':
 			if (cmdi + 3*T >= cmds) {
 				RE(cmd, cmd, cmds+=256, gbfdpl, 10);
 			}
@@ -516,8 +524,8 @@ gbfdpl(int s,int e){
 				memcpy(cmd+cmdi, MVR, 3);
 				cmdi += 3;
 			}
-		}
-		else {
+			break;
+		default:
 			cmd[cmdi++] = bf.a[i];
 		}
 		
@@ -627,11 +635,12 @@ gbfdb() {
 	--bf.gst;
 	++bf.gsz;
 	
+	switch (bf.a[bf.gst]) {
 	/*
 		if we've deleted "\n" character, then we need to move current
 		line above and append it to the end of previous one.
 	*/
-	if (bf.a[bf.gst] == '\n') {
+	case '\n':
 		i = bf.gst;
 		/* find previous "\n" or "zero" index. */
 		while (i > 0 && bf.a[--i] != '\n');
@@ -652,17 +661,15 @@ gbfdb() {
 		SYCUR();
 		/* reprint everything after cursor. */
 		gbfdplrst();
-	}
-	/* if we've deleted "\t". */
-	else if(bf.a[bf.gst] == '\t') {
+		break;
+	case '\t':
 		/* mimic tabulation by visual spaces. */
 		col -= T;
 		
 		SYCUR();
 		gbfdplrstl();
-	}
-	/* if character we've deleted is neither "\n", nor "\t". */
-	else {
+		break;
+	default:
 		/* move cursor back one char horizontally. */
 		--col;
 		/*
@@ -807,7 +814,7 @@ gbfel(){
 		/* now find this `p'. */
 		p = bf.gst-1;
 		while (p != -1 && bf.a[p] != '\n') --p;
-		if(bf.a[s] != '\n' && !p) p = -1;
+		if (bf.a[s] != '\n' && !p) p = -1;
 		
 		/* and jump to the previous line. */
 		gbfj(p+1);
@@ -845,19 +852,18 @@ gbff() {
 	if (nxi == bf.sz) return;
 	
 	bf.a[bf.gst] = bf.a[nxi];
-	/* if next character is "\n". */
-	if(bf.a[bf.gst] == '\n') {
+	
+	switch (bf.a[bf.gst]) {
+	case '\n':
 		++row;
 		col=1;
 		SYCUR();
-	}
-	/* if next character is "\t". */
-	else if (bf.a[bf.gst] == '\t') {
+		break;
+	case '\t':
 		col += T;
 		SYCUR();
-	}
-	/* if next character is regular. */
-	else {
+		break;
+	default:
 		++col;
 		write(1,MVR,3);
 	}
@@ -875,8 +881,8 @@ gbfb() {
 	bf.a[bf.gst+bf.gsz-1] = bf.a[bf.gst-1];
 	--bf.gst;
 	
-	/* if previous character is "\n". */
-	if (bf.a[bf.gst+bf.gsz] == '\n') {
+	switch (bf.a[bf.gst+bf.gsz]) {
+	case '\n': {
 		/* next char after previous "\n". */
 		int i;
 		/* number of tabs. */
@@ -892,17 +898,17 @@ gbfb() {
 		}
 		col = bf.gst-i+((T-1)*t)+1;
 		SYCUR();
+		break;
 	}
-	/* if previous character is "\t". */
-	else if (bf.a[bf.gst+bf.gsz] == '\t') {
+	case '\t':
 		col -= T;
 		SYCUR();
-	}
-	/* previous character is regular. */
-	else {
+		break;
+	default:
 		--col;
 		write(1, MVL, 3);
 	}
+	
 	DBGP("backw. row:%d,col:%d\n", row, col);
 }
 
@@ -925,6 +931,7 @@ gbfd() {
 		if (i > bf.sz) return;
 		++i;
 	}
+	
 	while((i+j) < bf.sz && bf.a[i+j] != '\n') {
 		if (bf.a[i+j] == '\t') c += T;
 		else ++c;
@@ -1107,7 +1114,8 @@ pc(unsigned char c) {
 		handle inserting "\n" separately,
 		'cause it alters the visual text structure.
 	*/
-	if (c == '\n') {
+	switch (c) {
+	case '\n':
 		/*
 			Ye, we need to redraw *everything* what's next
 			in the buffer after inserting newline.
@@ -1119,11 +1127,9 @@ pc(unsigned char c) {
 		++row;
 		col = 1;
 		SYCUR();
-		
 		gbfdplrst();
-	}
-	/* handle inserting "\t" separately too. */
-	else if (c == '\t') {
+		break;
+	case '\t':
 		/*
 			And too wee need to redraw everything after that moment.
 		*/
@@ -1133,9 +1139,8 @@ pc(unsigned char c) {
 		SYCUR();
 		
 		gbfdplrstl();
-	}
-	/* here we handle all printable characters. */
-	else{
+		break;
+	default:
 		write(1, &c, 1);
 		++col;
 		/*
@@ -1446,27 +1451,23 @@ main(int argc, char** argv) {
 			/*
 				Toggle modes ("0" and "1").
 			*/
-			case CTR('j'): {
+			case CTR('j'):
 				mod ^= 1;
 				updm();
 				SYCUR();
 				break;
-			}
 			/*
 				Save file.
 				
 				actually, we save file only if buffer has
 				been modified since last save.
 			*/
-			case CTR('s'): {
+			case CTR('s'):
 				if (!iso && tcht) sv();
 				break;
-			}
-			AC('n', gbfilb)
-			case CTR('n'): {
+			case CTR('n'):
 				if (mod == 1) gbfilb();
 				break;
-			}
 #if DBG
 			AC('\\', clerr)
 			AC(']', dbgpbuf)
@@ -1475,6 +1476,7 @@ main(int argc, char** argv) {
 			AC(';', gbff)
 			AC('l', gbfd)
 			AC('k', gbfu)
+			AC('n', gbfilb)
 			AC('a', gbfls)
 			AC('d', gbfle)
 			AC('s', gbfdb)
@@ -1484,11 +1486,10 @@ main(int argc, char** argv) {
 			AC('u', gbfsu)
 			/* backspace. */
 			case 8:
-			case 127: {
+			case 127:
 				if (mod) gbfdb();
 				break;
-			}
-			default: {
+			default:
 				/*
 					"Enter" key generates 13 (`CR') character,
 					but we want to make it 10 (`NL').
@@ -1505,7 +1506,6 @@ main(int argc, char** argv) {
 				
 				/* label for printing a character. */
 				pcl: pc(c);
-			}
 			}
 		}
 	}
