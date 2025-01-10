@@ -55,11 +55,6 @@
 #define DBG 0
 
 /** General macros. **/
-/* macro like the one above,but for realloc. */
-#define R(I,T,S,P,L)if(!(I=realloc(T,S))){write(2,"cant realloc "#P"#"#I".\n",16+L);return 1;}
-
-#define RE(I,T,S,P,L)if(!(I=realloc(T,S))){write(2,"cant realloc "#P"#"#I".\n",16+L);exit(1);}
-
 /*
 	There are two macros for converting integer macro to string.
 	
@@ -238,6 +233,19 @@ smalloc(size_t s) {
 	return ret;
 }
 
+/* safe realloc(3). */
+void*
+srealloc(void* p, size_t s) {
+	void* ret;
+	
+	ret = realloc(p, s);
+	if (!ret) {
+		die("can not reallocate %zu bytes.\n", s);
+	}
+	
+	return ret;
+}
+
 #if DBG
 /* print internal buffer representation for debug. */
 void
@@ -400,7 +408,7 @@ gbfxpnd(int d) {
 	bf.gsz += d;
 	
 	/* realloc buffer array to new size. */
-	RE(bf.a, bf.a, bf.sz, gbfxpnd, 11);
+	bf.a = srealloc(bf.a, bf.sz);
 	
 	/*
 		copy all the array contents starting from gap position to the
@@ -497,7 +505,7 @@ gbfdpl(int s,int e){
 		}
 		
 		if (cmdi >= cmds) {
-			RE(cmd, cmd, cmds+=256, gbfdpl, 10);
+			cmd = srealloc(cmd, cmds+=256);
 		}
 		
 		switch (bf.a[i]) {
@@ -506,7 +514,7 @@ gbfdpl(int s,int e){
 			
 			/* if we don't have enough space for ERSLF(\n\r?). */
 			if (cmdi+5 >= cmds) {
-				RE(cmd,cmd,cmds+=256,gbfdpl,10);
+				cmd = srealloc(cmd, cmds+=256);
 			}
 			memcpy(cmd+cmdi, ERSLF, 3);
 			cmdi += 3;
@@ -517,7 +525,7 @@ gbfdpl(int s,int e){
 			break;
 		case '\t':
 			if (cmdi + 3*T >= cmds) {
-				RE(cmd, cmd, cmds+=256, gbfdpl, 10);
+				cmd = srealloc(cmd, cmds+=256);
 			}
 			
 			j = 0;
@@ -1391,7 +1399,7 @@ main(int argc, char** argv) {
 			(at 0 index), so we put all the actual text after it.
 		*/
 		while((rb = read(fd, &rbf, RWBFSZ)) > 0) {
-			R(bf.a,bf.a, bf.sz+rb, main, 8);
+			bf.a = srealloc(bf.a, bf.sz+rb);
 			memcpy(bf.a+bf.sz, &rbf, rb);
 			bf.sz += rb;
 		}
