@@ -47,7 +47,7 @@
 #include<sys/ioctl.h>
 #include<stdlib.h>
 #include<signal.h>
-#include<errno.h>
+#include<stdarg.h> /* va_arg(3). */
 #include<string.h>
 #include<stdio.h>
 
@@ -64,12 +64,6 @@
 
 /* macro like the one above,but for realloc. */
 #define R(I,T,S,P,L)if(!(I=realloc(T,S))){write(2,"cant realloc "#P"#"#I".\n",16+L);return 1;}
-
-/*
-	error macro - if condition `C', then terminate and write a message `M'
-	with length `L'.
-*/
-#define E(C,M,L)if(C){write(2,#M,L);return 1;}
 
 /* exit(3) versions of macros above. */
 #define AE(I,S,P,L)if(!(I=malloc(S))){write(2,"cant alloc "#P"#"#I".\n",14+L);exit(1);}
@@ -225,6 +219,17 @@ char iso;
 char* fph;
 /* filename (basename) of a target file. */
 char* fnm;
+
+
+void
+die(char* err, ...) {
+	va_list ap;
+	va_start(ap, err);
+	dprintf(2, "[se]: ");
+	vdprintf(2, err, ap);
+	va_end(ap);
+	exit(1);
+}
 
 /**DBG print buffer. */
 void
@@ -1186,7 +1191,9 @@ sv() {
 	int rl;
 	
 	fd = open(fph, O_WRONLY, O_TRUNC);
-	EE(fd < 0, cant open file for save.\n, 25);
+	if (fd < 0) {
+		die("can not open file %s for saving.\n", fph);
+	}
 	
 	/* TODO: need a loop here. */
 	csz = bf.gst>RWBFSZ ? RWBFSZ : bf.gst;
@@ -1198,7 +1205,9 @@ sv() {
 	write(fd, &wbf, rl);
 	
 	ftruncate(fd, bf.sz-bf.gsz);
-	EE(close(fd) < 0, cant save file.\n, 17);
+	if (close(fd) < 0) {
+		die("can not save file %s.\n", fph);
+	}
 	
 	/* now, when we saved the file, reset "touched" flag. */
 	updfnmtcht(0);
@@ -1223,7 +1232,9 @@ void rawt() {
 	otos = tos;
 	
 	/* atexit(3) returns `0' if successful. */
-	EE(atexit(&trm), cant set an exit function.\n, 27);
+	if (atexit(&trm)) {
+		die("can not set up an exit function.\n");
+	}
 	
 	/*
 		Here is how we enter the "raw" terminal mode.
@@ -1299,7 +1310,9 @@ main(int argc, char** argv) {
 	row = BFST;
 	col = 1;
 	
-	E(argc > 2, too many args.\n, 15);
+	if (argc > 2) {
+		die("too many argumets.\n");
+	}
 	
 	/*
 		if no target file is specified, then enter "isolated mode".
@@ -1311,12 +1324,9 @@ main(int argc, char** argv) {
 		mod = 1;
 	}
 	
-	rawt();
-	
-	/* clear the screen. */
-	write(1, ERSA, 4);
-	
-	E(ioctl(1, TIOCGWINSZ, &wsz) < 0, cant get winsize.\n, 18);
+	if (ioctl(1, TIOCGWINSZ, &wsz) < 0) {
+		die("can not perform an request for window size.\n");
+	}
 	
 	gbfini();
 	
@@ -1328,7 +1338,9 @@ main(int argc, char** argv) {
 		
 		fph = argv[1];
 		fd = open(fph, O_RDWR);
-		E(fd < 0, cant open target.\n, 18);
+		if (fd < 0) {
+			die("can not open file %s.\n", fph);
+		}
 		
 		/*
 			Let's find file basename.
@@ -1368,10 +1380,17 @@ main(int argc, char** argv) {
 			bf.sz += rb;
 		}
 		
-		E(rb < 0, cant read target.\n, 18);
-		E(close(fd) < 0, cant close target.\n, 19);
+		if (rb < 0) {
+			die("error during reading file %s.\n", fph);
+		}
+		if (close(fd) < 0) {
+			die("can not close file %s.\n", fph);
+		}
 	}
 	
+	rawt();
+	/* clear the screen. */
+	write(1, ERSA, 4);
 	upda();
 	SYCUR();
 	
