@@ -137,7 +137,7 @@
 #define RVID "\033[7m"
 
 /* mask for detecting CTRL key. */
-#define CTR(C)(C&0x1f)
+#define CTR(C)(C & 0x1f)
 
 /* initial gap size for gap buffer (see `gbf'). */
 #define BFISZ 2
@@ -233,9 +233,9 @@ pbuf() {
 	while(i<bf.sz){
 		if (i == bf.gst || i == bf.gst+bf.gsz) DP("======\n");
 		if (i >= bf.gst && i < bf.gst+bf.gsz) DP("[%d]:#\n", i);
-		else if (bf.a[i] == 9) DP("[%d]:\\t\n", i);
-		else if (bf.a[i] == 10) DP("[%d]:\\n\n", i);
-		else if (bf.a[i] == 32) DP("[%d]:\\s\n", i);
+		else if (bf.a[i] == '\t') DP("[%d]:\\t\n", i);
+		else if (bf.a[i] == '\n') DP("[%d]:\\n\n", i);
+		else if (bf.a[i] == ' ') DP("[%d]:\\s\n", i);
 		else DP("[%d]:%c\n", i, bf.a[i]);
 		++i;
 	}
@@ -264,7 +264,7 @@ itos(unsigned char x, char** s) {
 	(*s)[l] = 0;
 	do {
 		/* convert digit to ASCII character. */
-		(*s)[l-i] = (x % 10) + 48;
+		(*s)[l-i] = (x % 10) + '0';
 		x /= 10;
 		++i;
 	} while(x);
@@ -478,7 +478,7 @@ gbfdpl(int s,int e){
 		}
 		
 		/* handle "\n" character. */
-		if (bf.a[i] == 10){
+		if (bf.a[i] == '\n'){
 			++n;
 			
 			/* if we don't have enough space for ERSLF(\n\r?). */
@@ -493,7 +493,7 @@ gbfdpl(int s,int e){
 			cmdi += 2;
 		}
 		/* handle "\t" character. */
-		else if(bf.a[i] == 9) {
+		else if(bf.a[i] == '\t') {
 			if (cmdi + 3*T >= cmds) {
 				RE(cmd, cmd, cmds+=256, gbfdpl, 10);
 			}
@@ -550,7 +550,7 @@ void gbfdplrstl(){
 	
 	/* and stop and the next newline. */
 	e = s;
-	while (e < bf.sz && bf.a[e] != 10) ++e;
+	while (e < bf.sz && bf.a[e] != '\n') ++e;
 	
 	gbfdpl(s,e);
 }
@@ -576,7 +576,7 @@ gbfdf() {
 		redraw all the text after gap. we do not need to change row/col
 		variables 'cause cursor is still staying on the same line.
 	*/
-	if (bf.a[agi] == 10) gbfdplrst();
+	if (bf.a[agi] == '\n') gbfdplrst();
 	/*
 		if char we've deleted is *not* a "\n", then we need to
 		redraw only current line.
@@ -618,10 +618,10 @@ gbfdb() {
 		if we've deleted "\n" character, then we need to move current
 		line above and append it to the end of previous one.
 	*/
-	if (bf.a[bf.gst] == 10) {
+	if (bf.a[bf.gst] == '\n') {
 		i = bf.gst;
 		/* find previous "\n" or "zero" index. */
-		while (i > 0 && bf.a[--i] != 10);
+		while (i > 0 && bf.a[--i] != '\n');
 		/*
 			we *do* need to change row/col, because
 			now cursor should be on the line above.
@@ -641,7 +641,7 @@ gbfdb() {
 		gbfdplrst();
 	}
 	/* if we've deleted "\t". */
-	else if(bf.a[bf.gst] == 9) {
+	else if(bf.a[bf.gst] == '\t') {
 		/* mimic tabulation by visual spaces. */
 		col -= T;
 		
@@ -756,10 +756,10 @@ gbfel(){
 	e = bf.gst+bf.gsz;
 	
 	/* find `s'. */
-	while (s != -1 && bf.a[s] != 10) --s;
+	while (s != -1 && bf.a[s] != '\n') --s;
 	
 	/* find `e'. */
-	while (e < bf.sz && bf.a[e] != 10) ++e;
+	while (e < bf.sz && bf.a[e] != '\n') ++e;
 	/* remember initial `e' value. */
 	ie = e;
 	
@@ -793,8 +793,8 @@ gbfel(){
 		int p;
 		/* now find this `p'. */
 		p = bf.gst-1;
-		while (p != -1 && bf.a[p] != 10) --p;
-		if(bf.a[s]!=10&&!p)p=-1;
+		while (p != -1 && bf.a[p] != '\n') --p;
+		if(bf.a[s] != '\n' && !p) p = -1;
 		
 		/* and jump to the previous line. */
 		gbfj(p+1);
@@ -833,13 +833,13 @@ gbff() {
 	
 	bf.a[bf.gst] = bf.a[nxi];
 	/* if next character is "\n". */
-	if(bf.a[bf.gst] == 10) {
+	if(bf.a[bf.gst] == '\n') {
 		++row;
 		col=1;
 		SYCUR();
 	}
 	/* if next character is "\t". */
-	else if (bf.a[bf.gst] == 9) {
+	else if (bf.a[bf.gst] == '\t') {
 		col += T;
 		SYCUR();
 	}
@@ -863,7 +863,7 @@ gbfb() {
 	--bf.gst;
 	
 	/* if previous character is "\n". */
-	if (bf.a[bf.gst+bf.gsz] == 10) {
+	if (bf.a[bf.gst+bf.gsz] == '\n') {
 		/* next char after previous "\n". */
 		int i;
 		/* number of tabs. */
@@ -873,15 +873,15 @@ gbfb() {
 		t=0;
 		i = bf.gst;
 		while (i > 0) {
-			if (bf.a[i-1] == 9) ++t;
-			if (bf.a[i-1] == 10) break;
+			if (bf.a[i-1] == '\t') ++t;
+			if (bf.a[i-1] == '\n') break;
 			--i;
 		}
 		col = bf.gst-i+((T-1)*t)+1;
 		SYCUR();
 	}
 	/* if previous character is "\t". */
-	else if (bf.a[bf.gst+bf.gsz] == 9) {
+	else if (bf.a[bf.gst+bf.gsz] == '\t') {
 		col-=T;
 		SYCUR();
 	}
@@ -908,12 +908,12 @@ gbfd() {
 	c = 1;
 	p = 1;
 	
-	while (bf.a[i] != 10) {
+	while (bf.a[i] != '\n') {
 		if (i > bf.sz) return;
 		++i;
 	}
-	while((i+j) < bf.sz && bf.a[i+j] != 10) {
-		if (bf.a[i+j] == 9) c += T;
+	while((i+j) < bf.sz && bf.a[i+j] != '\n') {
+		if (bf.a[i+j] == '\t') c += T;
 		else ++c;
 		
 		/*
@@ -956,12 +956,12 @@ gbfu() {
 	c=1;
 	p=1;
 	
-	while (bf.a[--i] != 10) {
+	while (bf.a[--i] != '\n') {
 		if (i < 0) return;
 	}
 	j = i;
 	while (--j >= 0) {
-		if (bf.a[j] == 10) break;
+		if (bf.a[j] == '\n') break;
 	}
 	
 	--row;
@@ -977,7 +977,7 @@ gbfu() {
 		*/
 		i=j+1;
 		while(c < col) {
-			if (bf.a[i] == 9) c += T;
+			if (bf.a[i] == '\t') c += T;
 			else ++c;
 			if (col-p < c-col) {
 				c = p;
@@ -1036,8 +1036,8 @@ gbfle() {
 	i = bf.gst+bf.gsz;
 	tc = 0;
 	
-	while (bf.a[i] != 10 && i < bf.sz) {
-		if (bf.a[i] == 9) ++tc;
+	while (bf.a[i] != '\n' && i < bf.sz) {
+		if (bf.a[i] == '\t') ++tc;
 		++i;
 	}
 	
@@ -1067,8 +1067,8 @@ gbfls(){
 	tc = 0;
 	
 	/* find the position of `i'. */
-	while (i > 0 && bf.a[i-1] != 10) {
-		if (bf.a[i-1] == 9) ++tc;
+	while (i > 0 && bf.a[i-1] != '\n') {
+		if (bf.a[i-1] == '\t') ++tc;
 		--i;
 	}
 	
@@ -1094,7 +1094,7 @@ pc(unsigned char c) {
 		handle inserting "\n" separately,
 		'cause it alters the visual text structure.
 	*/
-	if (c == 10) {
+	if (c == '\n') {
 		/*
 			Ye, we need to redraw *everything* what's next
 			in the buffer after inserting newline.
@@ -1110,7 +1110,7 @@ pc(unsigned char c) {
 		gbfdplrst();
 	}
 	/* handle inserting "\t" separately too. */
-	else if (c == 9) {
+	else if (c == '\t') {
 		/*
 			And too wee need to redraw everything after that moment.
 		*/
@@ -1141,7 +1141,7 @@ pc(unsigned char c) {
 void
 gbfilb() {
 	gbfle();
-	pc(10);
+	pc('\n');
 }
 
 /* terminate the program. */
@@ -1339,7 +1339,7 @@ main(int argc, char** argv) {
 		
 		/* find an index of last slash in the filepath. */
 		while (fph[j] != 0) {
-			if (fph[j] == 47) si = j;
+			if (fph[j] == '/') si = j;
 			++j;
 		}
 		
@@ -1380,10 +1380,9 @@ main(int argc, char** argv) {
 		if (read(0, &c, 1) > 0) {
 			switch (c) {
 			/*
-				ctrl+q;
 				gracefully quit the program.
 			*/
-			case CTR(113): {
+			case CTR('q'): {
 				/*
 					number of following "\n" visible on the screen;
 					i.e. it's not necessarily the last one in the text.
@@ -1401,7 +1400,7 @@ main(int argc, char** argv) {
 				i = bf.gst+bf.gsz;
 				n = 1;
 				while (i < bf.sz && n < wsz.ws_row) {
-					if (bf.a[i] == 10) ++n;
+					if (bf.a[i] == '\n') ++n;
 					++i;
 				}
 				
@@ -1416,59 +1415,44 @@ main(int argc, char** argv) {
 				return 0;
 			}
 			/*
-				ctrl+j.
 				Toggle modes ("0" and "1").
 			*/
-			case 10: {
+			case CTR('j'): {
 				mod ^= 1;
 				updm();
 				SYCUR();
 				break;
 			}
 			/*
-				ctrl+s.
 				Save file.
 				
 				actually, we save file only if buffer has
 				been modified since last save.
 			*/
-			case CTR(115): {
+			case CTR('s'): {
 				if (!iso && tcht) sv();
 				break;
 			}
-			/* n. */
-			AC(110, gbfilb)
-			/* ctrl + n. */
-			case 14: {
+			AC('n', gbfilb)
+			case CTR('n'): {
 				if (mod == 1) gbfilb();
 				break;
 			}
-			/**DBG "\". clear stderr file. */
-			AC(92, clerr)
-			/**DBG "]". print buffer. */
-			AC(93, pbuf)
-			/* j. */
-			AC(106, gbfb)
-			/* ";". */
-			AC(59, gbff)
-			/* l. */
-			AC(108, gbfd)
-			/* k. */
-			AC(107, gbfu)
-			/* a. */
-			AC(97, gbfls)
-			/* d. */
-			AC(100, gbfle)
-			/* s. */
-			AC(115, gbfdb)
-			/* f. */
-			AC(102, gbfdf)
-			/* e. */
-			AC(101, gbfel)
-			/* h. */
-			AC(104, gbfsd)
-			/* u. */
-			AC(117, gbfsu)
+			/**DBG clear stderr file. */
+			AC('\\', clerr)
+			/**DBG print buffer. */
+			AC(']', pbuf)
+			AC('j', gbfb)
+			AC(';', gbff)
+			AC('l', gbfd)
+			AC('k', gbfu)
+			AC('a', gbfls)
+			AC('d', gbfle)
+			AC('s', gbfdb)
+			AC('f', gbfdf)
+			AC('e', gbfel)
+			AC('h', gbfsd)
+			AC('u', gbfsu)
 			/* backspace. */
 			case 8:
 			case 127: {
@@ -1480,15 +1464,15 @@ main(int argc, char** argv) {
 					"Enter" key generates 13 (`CR') character,
 					but we want to make it 10 (`NL').
 				*/
-				if (c == 13) c=10;
+				if (c == '\r') c = '\n';
 				
 				/*
 					if we're not in insert mode or we try
-					to insert a non-alphabet character("\n" exclusive)
+					to insert a non-alphabet character ("\n" exclusive)
 					just do nothing.
 				*/
 				if (mod != 1 || ((c < 32 || c > 126)
-				    && c != 10 && c != 9)) break;
+				    && c != '\n' && c != '\t')) break;
 				
 				/* label for printing a character. */
 				pcl: pc(c);
