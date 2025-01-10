@@ -1151,7 +1151,7 @@ gbfilb() {
 
 /* terminate the program. */
 void
-trm() {
+term() {
 	free(bf.a);
 	tcsetattr(0, TCSANOW, &otos);
 }
@@ -1232,7 +1232,7 @@ void rawt() {
 	otos = tos;
 	
 	/* atexit(3) returns `0' if successful. */
-	if (atexit(&trm)) {
+	if (atexit(&term)) {
 		die("can not set up an exit function.\n");
 	}
 	
