@@ -110,13 +110,13 @@
 #define MVR "\x1b[C"
 
 /* buffer start row (integer). */
-#define BFSTR 2
+#define BFST 2
 
 /* move cursor to the top-left corner. */
 #define MVTL "\x1b[0;0H"
 
 /* move to buffer start. */
-#define MVBFST "\x1b[" STR(BFSTR) ";0H"
+#define MVBFST "\x1b[" STR(BFST) ";0H"
 
 /* erase forward to the end of screen. */
 #define ERSF "\x1b[J"
@@ -1001,7 +1001,7 @@ void
 gbfsd() {
 	++bfl;
 	gbfdpla();
-	if (row == 2) {
+	if (row == BFST) {
 		gbfd();
 		--row;
 	}
@@ -1296,7 +1296,7 @@ main(int argc, char** argv) {
 	mod = 0;
 	iso = 0;
 	tcht = 0;
-	row = BFSTR;
+	row = BFST;
 	col = 1;
 	
 	E(argc > 2, too many args.\n, 15);
