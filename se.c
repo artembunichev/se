@@ -55,23 +55,10 @@
 #define DBG 0
 
 /** General macros. **/
-/*
-	macro for allocating memory and checking if it has been successful.
-	I - identifer
-	S - size for alloction (as in malloc(3))
-	P - name of parent function (for logging)
-	L - length of parent function name plus identifier name length.
-*/
-#define A(I,S,P,L)if(!(I=malloc(S))){write(2,"cant alloc "#P"#"#I".\n",14+L);return 1;}
-
 /* macro like the one above,but for realloc. */
 #define R(I,T,S,P,L)if(!(I=realloc(T,S))){write(2,"cant realloc "#P"#"#I".\n",16+L);return 1;}
 
-/* exit(3) versions of macros above. */
-#define AE(I,S,P,L)if(!(I=malloc(S))){write(2,"cant alloc "#P"#"#I".\n",14+L);exit(1);}
-
 #define RE(I,T,S,P,L)if(!(I=realloc(T,S))){write(2,"cant realloc "#P"#"#I".\n",16+L);exit(1);}
-#define EE(C,M,L)if(C){write(2,#M,L);exit(1);}
 
 /*
 	There are two macros for converting integer macro to string.
@@ -227,6 +214,7 @@ char* fph;
 char* fnm;
 
 
+/** Functions. **/
 void
 die(char* err, ...) {
 	va_list ap;
@@ -235,6 +223,19 @@ die(char* err, ...) {
 	vdprintf(2, err, ap);
 	va_end(ap);
 	exit(1);
+}
+
+/* safe malloc(3). */
+void*
+smalloc(size_t s) {
+	void* ret;
+	
+	ret = malloc(s);
+	if (!ret) {
+		die("can not allocate %zu bytes.\n", s);
+	}
+	
+	return ret;
 }
 
 #if DBG
@@ -277,7 +278,7 @@ itos(unsigned char x, char** s) {
 	while (z /= 10) ++l;
 	
 	/* alloc memory for result string. */
-	AE(*s, l+1, itos, 6);
+	*s = smalloc(l+1);
 	
 	/*
 		start building up a string from end to begining.
@@ -316,7 +317,7 @@ scur(unsigned char r, unsigned char c) {
 	sl = strlen(rs) + strlen(cs) + 4;
 	
 	/* allocate memory for command string (+null byte). */
-	AE(s, sl+1, scur, 5);
+	s = smalloc(sl+1);
 	
 	/* building a command string. */
 	strcpy(s, "\x1b[");
@@ -366,7 +367,7 @@ gbfini() {
 	bf.sz = BFISZ;
 	
 	/* allocate memory for buffer array. */
-	AE(bf.a, BFISZ, gbfini, 10);
+	bf.a = smalloc(BFISZ);
 	
 	/* place gap at zero index. */
 	bf.gst=0;
@@ -889,7 +890,7 @@ gbfb() {
 		int t;
 		
 		--row;
-		t=0;
+		t = 0;
 		i = bf.gst;
 		while (i > 0) {
 			if (bf.a[i-1] == '\t') ++t;
@@ -1373,7 +1374,7 @@ main(int argc, char** argv) {
 		/* `-1' for excluding null-byte. */
 		fnml = j-si-1;
 		/* `+1' for including null-byte. */
-		A(fnm, fnml+1, main, 8);
+		fnm = smalloc(fnml+1);
 		
 		/*
 			Write filename base byte-by-byte.
