@@ -58,11 +58,11 @@
 /*
 	There are two macros for converting integer macro to string.
 	
-	Extra level macro `STR_HELPER' is needed, because `#x' trick
+	Extra level macro `STRCAST' is needed, because `#x' trick
 	works only with macro *arguments*.
 */
-#define STR_HELPER(x) #x
-#define STR(x) STR_HELPER(x)
+#define STRCAST(x) #x
+#define STR(x) STRCAST(x)
 
 /** Terminal-specific macros. **/
 /*
