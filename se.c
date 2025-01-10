@@ -66,11 +66,11 @@
 
 /** Terminal-specific macros. **/
 /*
-	macro for handling ambiguous characters in main loop.
-	C - character
-	F - function it executes it "0" mod.
+	macro for handling functional characters in main loop.
+	`C' - character
+	`F' - function it executes in "0" mod.
 */
-#define AC(C,F)case C:{if(!mod){F();break;}goto pcl;}
+#define FNCHAR(C,F)case C:if(!mod){F();break;}goto pcl
 
 /* move cursor to position (row, col). */
 #define MVPS(R,C)"\x1b["#R";"#C"H"
@@ -1478,21 +1478,21 @@ main(int argc, char** argv) {
 				if (mod == 1) gbfilb();
 				break;
 #if DBG
-			AC('\\', clerr)
-			AC(']', dbgpbuf)
+			FNCHAR('\\', clerr);
+			FNCHAR(']', dbgpbuf);
 #endif
-			AC('j', gbfb)
-			AC(';', gbff)
-			AC('l', gbfd)
-			AC('k', gbfu)
-			AC('n', gbfilb)
-			AC('a', gbfls)
-			AC('d', gbfle)
-			AC('s', gbfdb)
-			AC('f', gbfdf)
-			AC('e', gbfel)
-			AC('h', gbfsd)
-			AC('u', gbfsu)
+			FNCHAR('j', gbfb);
+			FNCHAR(';', gbff);
+			FNCHAR('l', gbfd);
+			FNCHAR('k', gbfu);
+			FNCHAR('n', gbfilb);
+			FNCHAR('a', gbfls);
+			FNCHAR('d', gbfle);
+			FNCHAR('s', gbfdb);
+			FNCHAR('f', gbfdf);
+			FNCHAR('e', gbfel);
+			FNCHAR('h', gbfsd);
+			FNCHAR('u', gbfsu);
 			/* backspace. */
 			case 8:
 			case 127:
