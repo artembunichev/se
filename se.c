@@ -1415,7 +1415,7 @@ int
 main(int argc, char** argv) {
 	/*
 		file descriptor for target file.
-		we make use of it in "isolated mode" only.
+		we *don't* make use of it in "isolated mode".
 	*/
 	int fd;
 	/* number of bytes read when we read from file. */
