@@ -50,19 +50,11 @@
 #include<stdarg.h> /* va_arg(3). */
 #include<string.h>
 #include<stdio.h>
+#include "se.h"
+#include "config.h"
 
 
 #define DBG 0
-
-/** General macros. **/
-/*
-	There are two macros for converting integer macro to string.
-	
-	Extra level macro `STRCAST' is needed, because `#x' trick
-	works only with macro *arguments*.
-*/
-#define STRCAST(x) #x
-#define STR(x) STRCAST(x)
 
 /** Terminal-specific macros. **/
 /*
@@ -113,9 +105,6 @@
 
 /* reverse video (it's used for reversing bg and fg colors). */
 #define RVID "\033[7m"
-
-/* mask for detecting CTRL key. */
-#define CTR(C)(C & 0x1f)
 
 /* initial gap size for gap buffer (see `gbf'). */
 #define BFISZ 2
@@ -1116,7 +1105,7 @@ gbfls(){
 	This is what happens when we hit the key in "1" mode.
 */
 void
-pc(unsigned char c) {
+pc(char c) {
 	gbfinsc(c);
 	
 	/*
@@ -1164,13 +1153,6 @@ pc(unsigned char c) {
 	updfnmtcht(1);
 }
 
-/* insert new line below and place cursor there. */
-void
-gbfilb() {
-	gbfle();
-	pc('\n');
-}
-
 /* terminate the program. */
 void
 term() {
@@ -1198,12 +1180,9 @@ upda() {
 	gbfdpla();
 }
 
-/*
-	save the file;
-	in "isolated mode" it does nothing.
-*/
+/* write (save) the file. */
 void
-sv() {
+wrfile() {
 	DBGP("save %s\n", fph);
 	
 	int fd;
@@ -1302,6 +1281,135 @@ void rawt() {
 	tcsetattr(0, TCSANOW, &tos);
 }
 
+/* gracefully quit editing session. */
+void
+quitses() {
+	/*
+		number of following "\n" visible on the screen;
+		i.e. it's not necessarily the last one in the text.
+	*/
+	int n;
+	/*
+		iterator that is used to find
+		out the `n' variable.
+	*/
+	int i;
+	
+	/*
+		find number of visually remaining newlines.
+	*/
+	i = bf.gst+bf.gsz;
+	n = 1;
+	while (i < bf.sz && n < wsz.ws_row) {
+		if (bf.a[i] == '\n') ++n;
+		++i;
+	}
+	
+	/*
+		jump to the last line, erase it and quit.
+	*/
+	col = 1;
+	row += n;
+	SYCUR();
+	write(1, ERSLF, 3);
+	
+	exit(0);
+}
+
+/* toggle editing mode. */
+void
+togmod() {
+	mod ^= 1;
+	updm();
+	SYCUR();
+}
+
+/*
+	save the file.
+	actually, we save file only if buffer has
+	been modified since last save.
+*/
+void
+sav() {
+	if (!iso && tcht) wrfile();
+}
+
+/* insert new line below and place cursor there. */
+void
+inslinebel() {
+	gbfle();
+	pc('\n');
+}
+
+/* print character only if it's printable (a regular).*/
+void
+ppc(char c) {
+	/*
+		"Enter" key generates 13 (`CR') character,
+		but we want to make it 10 (`NL').
+	*/
+	if (c == '\r') c = '\n';
+	
+	/*
+		if we're not in insert mode or we try to insert
+		a non-alphabet character ("\n" exclusive) just do nothing.
+	*/
+	if ((c < 32 || c >= 127) && c != '\n' && c != '\t') return;
+	
+	pc(c);
+}
+
+void
+handlechar(char c) {
+	/* keybinding index. */
+	int i;
+	
+	/*
+		Checking for matching keybinding.
+		A little tricky but actually simple.
+		
+		If the target key for binding is *not* a regular
+		character (so that means it's either CTRL or ALT
+		binding *or* special characters with codes `8' and
+		`127' - they are used for backspace), then we allow
+		to use them (execute the function they're bind to)
+		in both modes. However, if the character is one of
+		those backspaces codes, we allow to use them only
+		in "1" (insert) mode, because it has nothing to do
+		with navigation ("0" mode).
+		
+		And in case when a keybinding actually binds a regular
+		character, then in "0" mode we do execute its function,
+		and it "1" mode we print the character as is.
+	*/
+	for (i = 0; i < LEN(kbinds); ++i) {
+		if (c == kbinds[i].key) {
+			if (c < 32 || c >= 127) {
+				if (c == 8 || c == 127) {
+					if (!mod) goto out;
+				}
+				goto exekbind;
+			}
+			if (mod) goto out;
+			
+			exekbind:
+			kbinds[i].func();
+			break;
+			
+			out: ;
+		}
+		
+		/*
+			If we didn't find a matching keybinding, it means
+			that in "insert" mode we want to print the character
+			as is if it's a regular (printable) one.
+		*/
+		if (mod && (c >= 32 || c < 127 ) && (i == LEN(kbinds)-1)) {
+			ppc(c);
+		}
+	}
+}
+
 /*
 	the main function involves main loop.
 */
@@ -1323,7 +1431,7 @@ main(int argc, char** argv) {
 		we read user input one-by-one byte, and this
 		variables carries the value of this single byte.
 	*/
-	unsigned char c;
+	char c;
 	
 	wsz = (struct winsize) {0};
 	bf = (gbf) {0};
@@ -1421,101 +1529,7 @@ main(int argc, char** argv) {
 	/* The main loop. */
 	while(1) {
 		if (read(0, &c, 1) > 0) {
-			switch (c) {
-			/*
-				gracefully quit the program.
-			*/
-			case CTR('q'): {
-				/*
-					number of following "\n" visible on the screen;
-					i.e. it's not necessarily the last one in the text.
-				*/
-				int n;
-				/*
-					iterator that is used to find
-					out the `n' variable.
-				*/
-				int i;
-				
-				/*
-					find number of visually remaining newlines.
-				*/
-				i = bf.gst+bf.gsz;
-				n = 1;
-				while (i < bf.sz && n < wsz.ws_row) {
-					if (bf.a[i] == '\n') ++n;
-					++i;
-				}
-				
-				/*
-					jump to the last line, erase it and quit.
-				*/
-				col = 1;
-				row += n;
-				SYCUR();
-				write(1, ERSLF, 3);
-				
-				return 0;
-			}
-			/*
-				Toggle modes ("0" and "1").
-			*/
-			case CTR('j'):
-				mod ^= 1;
-				updm();
-				SYCUR();
-				break;
-			/*
-				Save file.
-				
-				actually, we save file only if buffer has
-				been modified since last save.
-			*/
-			case CTR('s'):
-				if (!iso && tcht) sv();
-				break;
-			case CTR('n'):
-				if (mod == 1) gbfilb();
-				break;
-#if DBG
-			FNCHAR('\\', clerr);
-			FNCHAR(']', dbgpbuf);
-#endif
-			FNCHAR('j', gbfb);
-			FNCHAR(';', gbff);
-			FNCHAR('l', gbfd);
-			FNCHAR('k', gbfu);
-			FNCHAR('n', gbfilb);
-			FNCHAR('a', gbfls);
-			FNCHAR('d', gbfle);
-			FNCHAR('s', gbfdb);
-			FNCHAR('f', gbfdf);
-			FNCHAR('e', gbfel);
-			FNCHAR('h', gbfsd);
-			FNCHAR('u', gbfsu);
-			/* backspace. */
-			case 8:
-			case 127:
-				if (mod) gbfdb();
-				break;
-			default:
-				/*
-					"Enter" key generates 13 (`CR') character,
-					but we want to make it 10 (`NL').
-				*/
-				if (c == '\r') c = '\n';
-				
-				/*
-					if we're not in insert mode or we try
-					to insert a non-alphabet character ("\n" exclusive)
-					just do nothing.
-				*/
-				if (mod != 1 || ((c < 32 || c > 126)
-				    && c != '\n' && c != '\t')) break;
-				
-				/* label for printing a character. */
-				pcl: pc(c);
-			}
+			handlechar(c);
 		}
 	}
 }
