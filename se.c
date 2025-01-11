@@ -134,7 +134,7 @@
 /* Debug print. */
 #define DBGP(...) dprintf(2, __VA_ARGS__)
 #else
-#define DBGP(...) do {} while (0)
+#define DBGP(...)
 #endif /* DBG. */
 
 
