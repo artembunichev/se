@@ -54,8 +54,6 @@
 #include "config.h"
 
 
-#define DBG 0
-
 /** Terminal-specific macros. **/
 /*
 	macro for handling functional characters in main loop.
@@ -132,7 +130,7 @@
 /* one horizontal tab occupies the same space as `T' whitespaces. */
 #define T 6
 
-#if DBG
+#ifdef DBG
 /* Debug print. */
 #define DBGP(...) dprintf(2, __VA_ARGS__)
 #else
@@ -235,7 +233,7 @@ srealloc(void* p, size_t s) {
 	return ret;
 }
 
-#if DBG
+#ifdef DBG
 /* print internal buffer representation for debug. */
 void
 dbgpbuf() {
@@ -1214,7 +1212,7 @@ wrfile() {
 	updfnmtcht(0);
 }
 
-#if DBG
+#ifdef DBG
 /* clear standard error file (debugging). */
 void
 clerr() {
