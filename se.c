@@ -127,9 +127,6 @@
 */
 #define SYCUR()scur(row,col)
 
-/* one horizontal tab occupies the same space as `T' whitespaces. */
-#define T 6
-
 #ifdef DBG
 /* Debug print. */
 #define DBGP(...) dprintf(2, __VA_ARGS__)
@@ -195,6 +192,8 @@ char* fph;
 /* filename (basename) of a target file. */
 char* fnm;
 
+/* gap between tab stops. It's read from `TABSIZE' env variable. */
+int tabsz;
 
 /** Functions. **/
 void
@@ -286,6 +285,59 @@ itos(unsigned char x, char** s) {
 		x /= 10;
 		++i;
 	} while(x);
+}
+
+/* get next tab stop from column `cur'. */
+int
+nxtabst(int cur) {
+	/* column counts from "1", need to bear it in mind. */
+	return tabsz * ((cur-1)/(tabsz) + 1) + 1;
+}
+
+/* get previous tab stop from column `cur'. */
+int
+prvtabst(int cur) {
+	if (cur <= tabsz+1) return 1;
+	if (!(cur % (tabsz+1))) {
+		return (tabsz+1) * (cur/tabsz+1) - 1;
+	}
+	return (tabsz+1) * (cur/tabsz+1);
+}
+
+/*
+	get column position of current character under cursor.
+*/
+int
+getcurcol() {
+	/*
+		line start index;
+		(actually, previous '\n' index or `-1').
+	*/
+	int lsi;
+	
+	lsi = bf.gst - 1;
+	while (lsi >= 0) {
+		if (bf.a[lsi] == '\n') break;
+		if (!lsi) break; 
+		--lsi;
+	}
+	++lsi;
+	
+	int vcolp;
+	vcolp = 1;
+	while (lsi < bf.gst) {
+		switch (bf.a[lsi]) {
+		case '\t': {
+			vcolp = nxtabst(vcolp);
+			break;
+		}
+		default:
+			++vcolp;
+		}
+		++lsi;
+	}
+	
+	return vcolp;
 }
 
 /* set terminal cursor to row and column (visually only). */
@@ -458,7 +510,7 @@ gbfinss(char* s) {
 	display (print) buffer from index `s' to `e' on the screen.
 */
 void
-gbfdpl(int s,int e){
+gbfdpl(int s, int e){
 	/*
 		command string that will be written to stdout when
 		it's completely ready.
@@ -485,6 +537,14 @@ gbfdpl(int s,int e){
 	cmds = 0;
 	n = 0;
 	
+	/*
+		virtual column position (counted from `1').
+		need it to work with tab stops.
+		it's important, that here we initialize it
+		with *not* `1', but cuurent column position.
+	*/
+	int vcolp;
+	vcolp = getcurcol();
 	while (i < e) {
 		if (i >= bf.gst && i < bf.gst+bf.gsz) {
 			i = bf.gst+bf.gsz;
@@ -497,9 +557,10 @@ gbfdpl(int s,int e){
 		
 		switch (bf.a[i]) {
 		case '\n':
+			vcolp = 1;
 			++n;
 			
-			/* if we don't have enough space for ERSLF(\n\r?). */
+			/* if we don't have enough space for ERSLF ("\n\r"?). */
 			if (cmdi+5 >= cmds) {
 				cmd = srealloc(cmd, cmds+=256);
 			}
@@ -510,19 +571,35 @@ gbfdpl(int s,int e){
 			memcpy(cmd+cmdi, "\n\r", 2);
 			cmdi += 2;
 			break;
-		case '\t':
-			if (cmdi + 3*T >= cmds) {
+		case '\t': {
+			/* next tab stop column. */
+			int nxts;
+			/* how many columns are there to the next tab stop. */
+			int tabdiff;
+			
+			nxts = nxtabst(vcolp);
+			tabdiff = nxts - vcolp;
+			vcolp = nxts;
+			
+			/*
+				Every `MVR' sequence takes 3 bytes.
+				And we need to move cursor to the right
+				`tabdiff' times.
+			*/
+			if (cmdi + 3*tabdiff >= cmds) {
 				cmd = srealloc(cmd, cmds+=256);
 			}
 			
 			j = 0;
-			while (j++ < T) {
+			while (j++ < tabdiff) {
 				memcpy(cmd+cmdi, MVR, 3);
 				cmdi += 3;
 			}
 			break;
+		}
 		default:
 			cmd[cmdi++] = bf.a[i];
+			++vcolp;
 		}
 		
 		++i;
@@ -606,18 +683,7 @@ gbfdf() {
 
 /* delete character under the cursor (i.e. delete backward). */
 void
-gbfdb() {
-	/*
-		iterator and previous "\n" character or "zero" idx.
-		their semantic meanings are not same.
-		actually, if we're on the first text line `i' should
-		point to `-1' to have the same meaning (index before first
-		character in the line) in case when we're not on the first line,
-		but it's easier to organize loop for `i' to be `0' eventually.
-		so we'll just handle this case separately later.
-	*/
-	int i;
-	
+gbfdb() {	
 	/*
 		we can't delete backward if cursor in the
 		begining of the text.
@@ -633,35 +699,24 @@ gbfdb() {
 	
 	switch (bf.a[bf.gst]) {
 	/*
-		if we've deleted "\n" character, then we need to move current
-		line above and append it to the end of previous one.
+		if we've deleted "\n" character, then we need to
+		move current line above and append it to the end
+		of previous one.
 	*/
 	case '\n':
-		i = bf.gst;
-		/* find previous "\n" or "zero" index. */
-		while (i > 0 && bf.a[--i] != '\n');
 		/*
-			we *do* need to change row/col, because
-			now cursor should be on the line above.
+			we can not use "fallthrough" trick here,
+			because in case of "\n" we need to redraw
+			*the whole* rest of the buffer, meanwhile for
+			"\t" we need to redraw only rest of current line.
 		*/
-		/* go line above. */
 		--row;
-		/*
-			place cursor in the end of the previous line.
-			`bf.gst - i' - for previous line length
-			`+(!i)' - is a trick for handling that semantic
-		          	difference described above.
-		*/
-		col = bf.gst - i +(!i);
-		
+		col = getcurcol();
 		SYCUR();
-		/* reprint everything after cursor. */
 		gbfdplrst();
 		break;
-	case '\t':
-		/* mimic tabulation by visual spaces. */
-		col -= T;
-		
+	case '\t':		
+		col = getcurcol();
 		SYCUR();
 		gbfdplrstl();
 		break;
@@ -856,7 +911,7 @@ gbff() {
 		SYCUR();
 		break;
 	case '\t':
-		col += T;
+		col = nxtabst(col);
 		SYCUR();
 		break;
 	default:
@@ -878,26 +933,10 @@ gbfb() {
 	--bf.gst;
 	
 	switch (bf.a[bf.gst+bf.gsz]) {
-	case '\n': {
-		/* next char after previous "\n". */
-		int i;
-		/* number of tabs. */
-		int t;
-		
+	case '\n': /* FALLTHROUGH. */
 		--row;
-		t = 0;
-		i = bf.gst;
-		while (i > 0) {
-			if (bf.a[i-1] == '\t') ++t;
-			if (bf.a[i-1] == '\n') break;
-			--i;
-		}
-		col = bf.gst-i+((T-1)*t)+1;
-		SYCUR();
-		break;
-	}
 	case '\t':
-		col -= T;
+		col = getcurcol();
 		SYCUR();
 		break;
 	default:
@@ -929,7 +968,7 @@ gbfd() {
 	}
 	
 	while((i+j) < bf.sz && bf.a[i+j] != '\n') {
-		if (bf.a[i+j] == '\t') c += T;
+		if (bf.a[i+j] == '\t') c = nxtabst(c);
 		else ++c;
 		
 		/*
@@ -968,9 +1007,9 @@ gbfu() {
 	/* previous column. */
 	int p;
 	
-	i=bf.gst;
-	c=1;
-	p=1;
+	i = bf.gst;
+	c = 1;
+	p = 1;
 	
 	while (bf.a[--i] != '\n') {
 		if (i < 0) return;
@@ -981,19 +1020,20 @@ gbfu() {
 	}
 	
 	--row;
-	if(col>i-j){
-		col=i-j;
+	if (col > i-j){
+		col = i-j;
 		SYCUR();
 		gbfj(j+col);
 	}
-	else{
+	else {
 		/*
 			here we're doing pretty much the same
-			thing as in `gbfd'.
+			thing as in `gbfd' - pick up a proper
+			place for cursor, keeping in mind tabs ("\t").
 		*/
-		i=j+1;
-		while(c < col) {
-			if (bf.a[i] == '\t') c += T;
+		i = j+1;
+		while (c < col) {
+			if (bf.a[i] == '\t') c = nxtabst(c);
 			else ++c;
 			if (col-p < c-col) {
 				c = p;
@@ -1044,27 +1084,33 @@ gbfsu() {
 /* move cursor to the line end. */
 void
 gbfle() {
-	/* index of next "\n" or end-of-file. */
+	/*
+		index of next "\n" or end-of-file.
+		this is an index we'll jump to.
+	*/
 	int i;
-	/* tab count. */
-	int tc;
 	
 	i = bf.gst+bf.gsz;
-	tc = 0;
 	
+	/* find `i'. */
 	while (bf.a[i] != '\n' && i < bf.sz) {
-		if (bf.a[i] == '\t') ++tc;
 		++i;
 	}
 	
 	if (i != bf.gst+bf.gsz) {
-		col += ((i-tc)-bf.gst-bf.gsz) + tc*T;
-		SYCUR();
+		/*
+			The order of `gbfj' and `getcurcol' is
+			important, because in order to find
+			*current* column position we need to jump
+			to desirable position first.
+		*/
 		gbfj(i);
+		col = getcurcol();
+		SYCUR();
 	}
 }
 
-/*move cursor to the line start.*/
+/* move cursor to the line start. */
 void
 gbfls(){
 	/*
@@ -1072,26 +1118,27 @@ gbfls(){
 		previous "\n".
 	*/
 	int i;
-	/* tab count. */
-	int tc;
 	
 	/*
 		if previous character is "\n", then next
 		one is `bf.gst'.
 	*/
 	i = bf.gst;
-	tc = 0;
 	
 	/* find the position of `i'. */
 	while (i > 0 && bf.a[i-1] != '\n') {
-		if (bf.a[i-1] == '\t') ++tc;
 		--i;
 	}
 	
 	if (i != bf.gst) {
-		col -= bf.gst-i-tc + tc*T;
-		SYCUR();
 		gbfj(i);
+		/*
+			we don't even need to compute new
+			column position, 'cause it' the begining
+			of a line and this is `1' anyway.
+		*/
+		col = 1;
+		SYCUR();
 	}
 }
 
@@ -1126,14 +1173,11 @@ pc(char c) {
 		gbfdplrst();
 		break;
 	case '\t':
-		/*
-			And too wee need to redraw everything after that moment.
-		*/
+		/* redraw just the rest of current *line*. */
 		write(1, ERSLF, 3);
 		
-		col += T;
+		col = nxtabst(col);
 		SYCUR();
-		
 		gbfdplrstl();
 		break;
 	default:
@@ -1408,6 +1452,17 @@ handlechar(char c) {
 	}
 }
 
+/* read tab size from the environment variable `TABSIZE'. */
+void
+gettabsz() {
+	char* tabenv = getenv("TABSIZE");
+	if (tabenv) tabsz = atoi(tabenv);
+	if (tabsz <= 0) {
+		/* default value. */
+		tabsz = 4;
+	}
+}
+
 /*
 	the main function involves main loop.
 */
@@ -1439,6 +1494,7 @@ main(int argc, char** argv) {
 	tcht = 0;
 	row = BFST;
 	col = 1;
+	gettabsz();
 	
 	if (argc > 2) {
 		die("too many argumets.\n");
